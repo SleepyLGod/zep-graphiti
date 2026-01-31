@@ -1,0 +1,599 @@
+21:35:08 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:08 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:08 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='WRITE', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:08 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:08 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:08 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:08 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:08 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n                                    MATCH (e:Episodic)\n                                    WHERE e.valid_at <= $reference_time\n                                    \nAND e.group_id IN $group_ids\nAND e.source = $source\n        RETURN\n        \n    e.uuid AS uuid,\n    e.name AS name,\n    e.group_id AS group_id,\n    e.created_at AS created_at,\n    e.source AS source,\n    e.source_description AS source_description,\n    e.content AS content,\n    e.valid_at AS valid_at,\n    e.entity_edges AS entity_edges\n\n        ORDER BY e.valid_at DESC\n        LIMIT $num_episodes\n        ' {'database_': 'neo4j', 'reference_time': datetime.datetime(2026, 1, 31, 13, 35, 8, 650972, tzinfo=datetime.timezone.utc), 'num_episodes': 10, 'group_ids': ['demo_session_20260131_213508'], 'source': 'message'} {}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'db': 'neo4j'}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:08 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'name', 'group_id', 'created_at', 'source', 'source_description', 'content', 'valid_at', 'entity_edges'], 'qid': 0}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 2, 'db': 'neo4j'}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:08 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:08 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:08 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:08 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+
+======================================================================
+  TURN 1: User introduces themselves - creates new entities
+======================================================================
+
+User: Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer.
+
+Expected entities: ['Alice Chen (Person)', 'TechCorp (Organization)']
+Expected relationships: ['Alice Chen WORKS_AT TechCorp']
+
+----------------------------------------------------------------------
+
+ ZEP API: add_message (thread.add_messages)()
+   group_id: demo_session_20260131_213508
+   role: user
+   name: Alice Chen
+   content: Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer.
+ GRAPHITI: add_episode()
+   Span Start: zep.graphiti.add_episode
+    Neo4j Query #1: MATCH (e:Episodic) WHERE e.valid_at <= $reference_time AND e.group_id IN $group_ids AND e.source = $source RETURN e.uuid AS uuid, e.name AS name, e.gr...
+      → 0 records, 30.3ms
+   Span Start: zep.graphiti.llm.generate
+
+   LLM Call #1
+      Model: Qwen/Qwen2.5-32B-Instruct
+      [system]: You are an AI assistant that extracts entity nodes from conversational messages. 
+    Your primary task is to extract and classify the speaker and other significant entities mentioned in the conversat...
+      [user]: 
+<ENTITY TYPES>
+[{'entity_type_id': 0, 'entity_type_name': 'Entity', 'entity_type_description': 'Default entity classification. Use this entity type if the entity is not one of the other listed types....
+      Response: {
+  "extracted_entities": [
+    {
+      "name": "Alice Chen",
+      "entity_type_id": 0
+    },
+    {
+      "name": "TechCorp",
+      "entity_type_id": 0
+    }
+  ]
+}
+      Tokens: prompt=491, completion=54
+{
+    "name": "zep.graphiti.llm.generate",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0xfa07d1e4e1c9ad33",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0xb58046870046001c",
+    "start_time": "2026-01-31T13:35:08.683197Z",
+    "end_time": "2026-01-31T13:35:10.354213Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "llm.provider": "openai",
+        "model.size": "medium",
+        "max_tokens": 4096,
+        "prompt.name": "extract_nodes.extract_message"
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | Extracted 2 entities in 1673 ms
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | Created new node: Alice Chen (UUID: 9fbefe48-8540-4878-ac2a-1f6d0e89c3e8)
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | Created new node: TechCorp (UUID: 10633107-3301-4b90-a8d3-96375555b786)
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | Extracted nodes: [('Alice Chen', '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8'), ('TechCorp', '10633107-3301-4b90-a8d3-96375555b786')]
+   Span End: zep.graphiti.llm.generate (1671.0ms)
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:10 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:10 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:10 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:10 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:10 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E86E]  C: RUN 'CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit})YIELD node AS n, score WHERE n.group_id IN $group_ids\n            WITH n, score\n            ORDER BY score DESC\n            LIMIT $limit\n            RETURN\n            \n        n.uuid AS uuid,\n        n.name AS name,\n        n.group_id AS group_id,\n        n.created_at AS created_at,\n        n.summary AS summary,\n        labels(n) AS labels,\n        properties(n) AS attributes\n    ' {'database_': 'neo4j', 'query': 'group_id:"demo_session_20260131_213508" AND (\\TechCorp)', 'limit': 20, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:10 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:10 | neo4j.pool | DEBUG | [#E860]  _: <POOL> picked existing connection bolt-104890
+21:35:10 | neo4j.pool | DEBUG | [#E860]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:10 | neo4j.pool | DEBUG | [#E860]  _: <POOL> handing out existing connection
+21:35:10 | neo4j.io | DEBUG | [#E860]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:10 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E860]  C: RUN '\n                                                                                                                                    MATCH (n:Entity)\n                                                                                                                                     WHERE n.group_id IN $group_ids\n            WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score\n            WHERE score > $min_score\n            RETURN\n            \n        n.uuid AS uuid,\n        n.name AS name,\n        n.group_id AS group_id,\n        n.created_at AS created_at,\n        n.summary AS summary,\n        labels(n) AS labels,\n        properties(n) AS attributes\n    \n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'search_vector': [-0.021573590114712715, -0.012347658164799213, 0.05114714801311493, -0.0450495220720768, -0.040291108191013336, -0.06301240622997284, 0.15784123539924622, 0.02499924972653389, 0.028567343950271606, -0.057180870324373245, 0.06758309155702591, -0.02094287984073162, 0.06579514592885971, 0.02900475636124611, -0.0013209818862378597, -0.05683525651693344, 0.02907436713576317, -0.08313947916030884, 0.03274289146065712, -0.10951676219701767, 0.0037689076270908117, -0.03170592337846756, -0.035755451768636703, 0.06925734877586365, 0.01348133571445942, 0.03227928653359413, -0.005691573955118656, 0.05115944892168045, -0.05110306665301323, -0.06216280162334442, -0.12067117542028427, 0.0554843470454216, 0.008498817682266235, -0.006388494279235601, 0.056648265570402145, 0.07461311668157578, -0.026781857013702393, 0.019609360024333, 0.06548252701759338, -0.07936568558216095, -0.0643572211265564, -0.11321882158517838, 0.01874917559325695, 0.0039882720448076725, 0.04936899244785309, -0.04614740610122681, 0.029530277475714684, -0.04378291219472885, 0.0961722880601883, 0.07531148195266724, 0.006902564782649279, -0.06455326825380325, 0.024319950491189957, 0.059384290128946304, 0.013490313664078712, -0.001707117771729827, 0.01645989902317524, -0.015925943851470947, 0.04449696093797684, -0.041630472987890244, 0.08270712941884995, -0.12345372885465622, -0.041280560195446014, 0.06592756509780884, 0.06952199339866638, 0.04413216561079025, -0.04334152862429619, 0.05232682451605797, -0.08780115097761154, -0.11635064333677292, 0.048840757459402084, -0.037341512739658356, 0.047288380563259125, 0.07372705638408661, 0.018078146502375603, 0.05094928666949272, 0.047808971256017685, 0.04674968868494034, 0.08922374248504639, -0.0013643373968079686, 0.09142893552780151, 0.037473164498806, -0.08028344064950943, 0.023306258022785187, -0.06447078287601471, 0.013525196351110935, 0.021125681698322296, 0.04030051454901695, 0.02655995450913906, 0.030976150184869766, -0.06036258488893509, 0.04621489718556404, 0.03127215430140495, -0.03586013987660408, -0.01891123317182064, -0.04755006358027458, -0.07097462564706802, -0.06354781240224838, -0.05599423125386238, 0.12683001160621643, 0.05768817290663719, 0.06737829744815826, -0.003594558220356703, -0.015806162729859352, 0.0038707773201167583, -0.006870652083307505, -0.027234189212322235, 0.05796949937939644, 0.13121068477630615, 0.027070369571447372, -0.057342853397130966, 0.038428958505392075, -0.08236633986234665, -0.007144697941839695, -0.09193592518568039, 0.0518096461892128, -0.02716585248708725, 0.06713468581438065, 0.07035049796104431, 0.006399556994438171, 0.05492526665329933, 0.021712947636842728, -0.049756038933992386, -0.020029794424772263, -0.008889535441994667, -0.04625333473086357, -0.02029605768620968, -3.0029869289037265e-33, -0.02269560657441616, 0.09759581834077835, -0.015365300700068474, 0.070272296667099, 0.05632585287094116, 0.0008306861273013055, -0.02792041003704071, 0.006989209912717342, -0.1223544031381607, 0.011141094379127026, -0.09095264226198196, 0.05514294654130936, -0.037894636392593384, 0.017505034804344177, 0.08199770748615265, -0.05848873779177666, -0.057870760560035706, 0.024296224117279053, 0.029313798993825912, -0.046027835458517075, -0.06050318107008934, 0.011078555136919022, -0.02457156963646412, 0.02542508766055107, 0.019033018499612808, -0.023587223142385483, -0.08437123894691467, 0.022020479664206505, 0.0296661164611578, 0.0688452199101448, 0.009124440141022205, 0.05377127230167389, 0.011411952786147594, -0.017839720472693443, 0.033323079347610474, -0.012924491427838802, -0.05040980130434036, -0.09216437488794327, 0.0430179089307785, 0.01681516505777836, -0.021254122257232666, 0.07136893272399902, -0.010277197696268559, 0.05098601058125496, 0.023502809926867485, -0.0007532921154052019, -0.013507663272321224, -0.03737457096576691, 0.07103685289621353, 0.028635039925575256, -0.07810430973768234, 0.02414834499359131, -0.05033865571022034, -0.07737930864095688, 0.06294119358062744, -0.04684148728847504, 0.009348512627184391, -0.018652508035302162, 0.00796954520046711, 0.008997931145131588, -0.01780613511800766, 0.11602001637220383, -0.031224936246871948, 0.0637076199054718, -0.03824106976389885, 0.04538474977016449, 0.053774621337652206, 0.02541201375424862, 0.03925389423966408, 0.00785871036350727, 0.005471432115882635, -0.003942531533539295, 0.03675368055701256, -0.029831258580088615, -0.04694501310586929, -0.008480066433548927, -0.022048208862543106, 0.07248709350824356, -0.1106698140501976, 0.02101076953113079, -0.008088728412985802, -0.0241888165473938, 0.03444058448076248, 0.06549537926912308, 0.035855937749147415, 0.02083815447986126, 0.058406829833984375, -0.05932609364390373, -0.015545478090643883, -0.015448320657014847, -0.11485761404037476, -0.026790190488100052, -0.00046057903091423213, 0.12532508373260498, -0.05124177783727646, 2.1946013005531625e-33, 0.015059435740113258, -0.023048439994454384, 0.07172750681638718, -0.014370482414960861, -0.018654610961675644, -0.0762927234172821, 0.03559895232319832, 0.0190065186470747, -0.026058344170451164, 0.11699391156435013, 0.03363821282982826, 0.04128805175423622, -0.02240445278584957, -0.006900215055793524, -0.02046356536448002, 0.0394543781876564, 0.05996941402554512, -0.09573031216859818, -0.020482417196035385, -0.006693406030535698, 0.012797587551176548, -0.05573727563023567, -0.03050757758319378, 0.061862822622060776, -0.0023842533119022846, 0.09879090636968613, -0.03602081164717674, 0.035189561545848846, 0.002298960229381919, -0.010547647252678871, -0.038943346589803696, -0.03213917091488838, 0.0061683510430157185, 0.09778018295764923, -0.0004218225949443877, 0.015060427598655224, -0.006527448073029518, 0.00804260466247797, 0.06337394565343857, -0.06356123834848404, 0.06390202790498734, -0.02356557734310627, -0.029467398300766945, 0.05590462312102318, -0.033709924668073654, -0.050834301859140396, 0.06411882489919662, -0.06744029372930527, 0.008031999692320824, 0.005167418159544468, -0.03446727246046066, 0.008828636258840561, -0.009574397467076778, 0.02026326395571232, -0.032565753906965256, 0.045975059270858765, -0.008591030724346638, 0.03995873034000397, -0.07999314367771149, -0.038932543247938156, 0.06028616800904274, 0.009151674807071686, 0.04018613323569298, 0.08244413882493973, -0.07668926566839218, 0.010439389385282993, 0.034563127905130386, 0.08141953498125076, -0.07679938524961472, 0.04488196223974228, 0.0046537830494344234, 0.01771061308681965, -0.04879726842045784, -0.134109228849411, -0.05904918536543846, 0.0042329225689172745, -0.05341920256614685, -0.04422231391072273, -0.09553702920675278, -0.03322834521532059, 0.0445687472820282, -0.020473606884479523, -0.00869817566126585, 0.10624183714389801, -0.013067982159554958, 0.05536448583006859, 0.07280494272708893, 0.0014302160125225782, -0.028906358405947685, -0.021016046404838562, -0.0088424701243639, -0.060485582798719406, -0.023679060861468315, -0.03987859934568405, -0.02865380421280861, -1.2374275826232406e-08, -0.045816849917173386, 0.0003929813683498651, -0.056615281850099564, -0.039002567529678345, 0.014779957011342049, -0.07410908490419388, 0.0055203731171786785, 0.021557560190558434, 0.06694751977920532, 0.01641230285167694, -0.07842343300580978, -0.009315731935203075, -0.04446807876229286, 0.08088970929384232, -0.018038619309663773, 0.007249278016388416, -0.09804530441761017, 0.0386204831302166, -0.010973541997373104, -0.02245492674410343, -0.006940177641808987, 0.016850298270583153, 0.06513862311840057, -0.039942629635334015, -0.036230240017175674, 0.05477631092071533, 0.010158794932067394, -0.03209267184138298, 0.059000782668590546, 0.053661298006772995, -0.047815632075071335, 0.02397717908024788, -0.0820906013250351, -0.0208769291639328, -0.028116866946220398, -0.09177128225564957, 0.0539262630045414, 0.0032726393546909094, -0.02242656797170639, -0.03158968687057495, 0.007081444840878248, 0.01564093492925167, -0.021868210285902023, 0.025976359844207764, -0.022023407742381096, -0.03907831385731697, 0.003750884672626853, -0.01569954864680767, 0.04913609102368355, -0.05860727280378342, 0.06219980865716934, 0.020738517865538597, -0.03041917085647583, 0.04290768876671791, -0.03356659412384033, -0.05751099810004234, 0.027285940945148468, 0.01466532051563263, -0.056393690407276154, 0.040883567184209824, 0.006173002067953348, -0.06861770153045654, 0.07902631163597107, -0.07084527611732483], 'limit': 20, 'min_score': 0.6, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:10 | neo4j.io | DEBUG | [#E860]  C: PULL {'n': 1000}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'name', 'group_id', 'created_at', 'summary', 'labels', 'attributes'], 'qid': 0}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 4, 'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:10 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:10 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:10 | neo4j.pool | DEBUG | [#E8C4]  _: <POOL> picked existing connection bolt-104891
+21:35:10 | neo4j.pool | DEBUG | [#E8C4]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:10 | neo4j.pool | DEBUG | [#E8C4]  _: <POOL> handing out existing connection
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  C: RUN 'CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit})YIELD node AS n, score WHERE n.group_id IN $group_ids\n            WITH n, score\n            ORDER BY score DESC\n            LIMIT $limit\n            RETURN\n            \n        n.uuid AS uuid,\n        n.name AS name,\n        n.group_id AS group_id,\n        n.created_at AS created_at,\n        n.summary AS summary,\n        labels(n) AS labels,\n        properties(n) AS attributes\n    ' {'database_': 'neo4j', 'query': 'group_id:"demo_session_20260131_213508" AND (\\Alice Chen)', 'limit': 20, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  C: PULL {'n': 1000}
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:10 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:10 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:10 | neo4j.pool | DEBUG | [#E8A6]  _: <POOL> picked existing connection bolt-104884
+21:35:10 | neo4j.pool | DEBUG | [#E8A6]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:10 | neo4j.pool | DEBUG | [#E8A6]  _: <POOL> handing out existing connection
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  C: RUN '\n                                                                                                                                    MATCH (n:Entity)\n                                                                                                                                     WHERE n.group_id IN $group_ids\n            WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score\n            WHERE score > $min_score\n            RETURN\n            \n        n.uuid AS uuid,\n        n.name AS name,\n        n.group_id AS group_id,\n        n.created_at AS created_at,\n        n.summary AS summary,\n        labels(n) AS labels,\n        properties(n) AS attributes\n    \n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'search_vector': [-0.026355842128396034, 0.01325964741408825, -0.03123941458761692, 0.05565181002020836, -0.021013621240854263, 0.04512761905789375, 0.12929201126098633, -0.01254021655768156, 0.03281579539179802, 0.006521471776068211, -0.005904946476221085, -0.03658685088157654, 0.042848460376262665, -0.0075250961817801, -0.023021776229143143, 0.11054187268018723, 0.010219978168606758, -0.042499568313360214, 0.019017336890101433, -0.07608968019485474, -0.13376878201961517, -0.03232574090361595, -0.018285753205418587, -0.022637564688920975, 0.05376994237303734, -0.022374911233782768, 0.03646726906299591, -0.05779257044196129, 0.0012576642911881208, -0.06428270787000656, -0.030370045453310013, 0.0642942264676094, 0.03901150822639465, 0.011392112821340561, -0.01739480346441269, 0.09479715675115585, -0.03670905530452728, -0.0030228146351873875, 0.05700371041893959, 0.061914052814245224, -0.023507071658968925, -0.04538993164896965, 0.018170667812228203, -0.09681395441293716, -0.014017882756888866, -0.005258884280920029, 0.056503601372241974, 0.028119899332523346, -0.02629508450627327, -0.0054064784198999405, -0.012937781400978565, -0.006439867429435253, -0.059024516493082047, 0.025439124554395676, 0.048410505056381226, 0.03658035025000572, 0.07683489471673965, 0.0024799660313874483, -0.025990450754761696, -0.01675312966108322, -0.022672297433018684, 0.04118428751826286, -0.008922669105231762, 0.0476997010409832, -0.026831338182091713, 0.04183236509561539, -0.03166991472244263, 0.0115780308842659, -0.013250049203634262, -0.018381424248218536, -0.03548746556043625, 0.047460511326789856, -0.08344292640686035, -0.03819549083709717, 0.04908224940299988, -0.07479158788919449, 0.061932794749736786, -0.03451530635356903, 0.03825297951698303, 0.03824131563305855, -0.06453172862529755, -0.011967931874096394, 0.029251251369714737, -0.003771973541006446, -0.04279826954007149, 0.07970042526721954, -0.03534647822380066, -0.016085540875792503, -0.03445926308631897, -0.06758332997560501, -0.06803494691848755, 0.04568883776664734, 0.03702521324157715, 0.037402816116809845, 0.041505116969347, 0.03652043640613556, 0.022399218752980232, -0.04493120685219765, -0.039846789091825485, 0.1558452993631363, 0.06930948048830032, 0.06630665063858032, -0.022137505933642387, -0.029149578884243965, 0.03287988901138306, -0.06723719090223312, 0.07750950008630753, -0.014444703236222267, -0.008659232407808304, -0.015648337081074715, 0.04050087183713913, -0.054106056690216064, -0.019519448280334473, -0.05157645791769028, 0.058186743408441544, 0.010076092556118965, 0.025826068595051765, 0.1045052707195282, -0.06625799834728241, -0.04678981751203537, 0.05726945772767067, -0.057046450674533844, -0.026757480576634407, 0.017750224098563194, 0.03007330372929573, -0.014178632758557796, 0.041757430881261826, -1.5362763422926947e-33, 0.002108874963596463, -0.050530705600976944, 0.059171419590711594, -0.009861056692898273, 0.06120507791638374, 0.05001093074679375, 0.04546564444899559, -0.0439346618950367, -0.022026460617780685, 0.0014880731469020247, -0.03617876395583153, -0.011359072290360928, -0.10034970194101334, -0.05947431921958923, 0.020383372902870178, 0.07848890870809555, -0.07971902191638947, 0.07296567410230637, -0.06161768361926079, 0.05630829930305481, 0.1361342966556549, 0.08937987685203552, -0.029327500611543655, 0.0699060708284378, -0.00417146272957325, 0.019862433895468712, 0.13937044143676758, -0.05120294913649559, 0.04876798018813133, -0.0005354302120395005, 0.0258288886398077, 0.052600737661123276, -0.004160192795097828, 0.031495094299316406, -0.0692664384841919, -0.002921398961916566, -0.05118492990732193, 0.013015015050768852, -0.014923220500349998, 0.019789360463619232, 0.02590189315378666, -0.017075158655643463, 0.14261028170585632, -0.08737364411354065, -0.07588749378919601, 0.006220188923180103, 0.0696755200624466, -0.04459672421216965, 0.0013796762796118855, 0.024149838835000992, 0.00802000891417265, 0.012482338584959507, -0.010259635746479034, 0.08851812034845352, 0.06670058518648148, -0.1325545459985733, 0.018631109967827797, 0.015401056036353111, -0.013076604343950748, 0.04545596241950989, -0.04068077728152275, -0.059218600392341614, -0.02083008736371994, 0.04339516535401344, -0.03370627388358116, -0.050805509090423584, 0.04784303903579712, -0.05853618308901787, 0.034618865698575974, 0.010591198690235615, -0.024871740490198135, -0.006305110175162554, 0.04472888261079788, -0.06334415078163147, -0.07098566740751266, -0.034425992518663406, -0.0319572389125824, -0.040237054228782654, -0.011668861843645573, -0.009921743534505367, -0.05259842425584793, 0.0330997109413147, 0.03726525232195854, 0.005469031631946564, -0.06024039536714554, -0.09134622663259506, -0.049536943435668945, 0.0034234081394970417, 0.008246117271482944, 0.0043776920065283775, -0.09959103167057037, 0.02363327518105507, 0.017389599233865738, 0.02782953344285488, -0.024334117770195007, 1.566308386246281e-33, -0.07471038401126862, -0.019663669168949127, -0.010429508052766323, 0.05440014228224754, 0.08643398433923721, -0.05449403449892998, 0.053397420793771744, 0.07361898571252823, 0.04549533128738403, -0.03758566454052925, -0.004163020756095648, -0.043809983879327774, -0.012282841838896275, 0.029449544847011566, 0.06610804051160812, -0.03817789629101753, 0.07184673845767975, 0.012702271342277527, -0.03365994989871979, 0.016136499121785164, -0.006881953217089176, -0.02202904410660267, -0.06492672860622406, -0.050101619213819504, 0.09308953583240509, 0.11385616660118103, 0.15031279623508453, -0.06801961362361908, -0.053482066839933395, 0.03752119094133377, -0.054881490767002106, -0.03859531879425049, -0.09455815702676773, 0.034267608076334, -0.011094218119978905, 0.010718969628214836, -0.0407571978867054, 0.019553309306502342, -0.07066164910793304, -0.05140780657529831, 0.07492438703775406, -0.0067253257147967815, -0.010825724340975285, 0.10406211763620377, 0.046868931502103806, -0.03548797219991684, -0.041724614799022675, 0.024402964860200882, 0.01762327179312706, 0.03239086642861366, -0.1395357996225357, -0.05901215597987175, 0.023498473688960075, 0.008859630674123764, -0.011638352647423744, -0.029226146638393402, 0.008874417282640934, 0.06741739064455032, 0.15705494582653046, -0.027077175676822662, -0.05709275230765343, 0.04620066285133362, 0.011166158132255077, 0.027924155816435814, -0.09857237339019775, -0.006786038633435965, 0.022794559597969055, -0.02090008370578289, -0.0189130287617445, -0.060991428792476654, 0.11378229409456253, 0.031142720952630043, -0.07172193378210068, 0.02203940413892269, -0.02188713103532791, 0.06362458318471909, -0.06930588185787201, 0.029606888070702553, -0.03542408347129822, 0.013812887482345104, -0.031423065811395645, -0.04199037700891495, 0.00221935473382473, 0.08181841671466827, 0.008770052343606949, 0.065360888838768, 0.017235910519957542, -0.008062401786446571, 0.018537012860178947, 0.0077066426165401936, -0.00889023020863533, -0.014530003070831299, -0.00728809367865324, -0.05414712429046631, -0.04535195231437683, -1.1776275954389348e-08, -0.08916942030191422, 0.01235968992114067, -0.04687945917248726, -0.028432749211788177, -0.007776240818202496, 0.058875009417533875, 0.0722852274775505, 0.010020192712545395, -0.02417520433664322, 0.02755662240087986, 0.04600527882575989, -0.02899683080613613, 0.07253126800060272, 0.04168358072638512, 0.09452751278877258, -0.03317136690020561, 0.025137143209576607, -0.011572047136723995, -0.02130044251680374, -0.05349064618349075, 0.007440172601491213, -0.031220121309161186, 0.06216119974851608, -0.06768105179071426, -0.06877601146697998, 0.0550718754529953, -0.04570503905415535, 0.03657346963882446, -0.003110588062554598, 0.03250838816165924, -0.01681230589747429, 0.0588655062019825, -0.0225375983864069, -0.001758615835569799, 0.037617046386003494, 0.03610309213399887, -0.0035550708416849375, 0.024369610473513603, 0.0024036697577685118, 0.05777854099869728, -0.08994634449481964, -0.006505818106234074, 0.07513695955276489, -0.032711997628211975, -0.009561094455420971, -0.12188789993524551, 0.03437691554427147, -0.09762433171272278, 0.09146109223365784, 0.044234149158000946, -0.005077491980046034, -0.06700272113084793, 0.044892922043800354, -0.034284524619579315, -0.005417755804955959, 0.0436774343252182, 0.025720594450831413, -0.04965644329786301, -0.06739189475774765, 0.05100289359688759, -0.007592913694679737, -0.037290748208761215, 0.01670803315937519, -0.02741333283483982], 'limit': 20, 'min_score': 0.6, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  C: PULL {'n': 1000}
+21:35:10 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'name', 'group_id', 'created_at', 'summary', 'labels', 'attributes'], 'qid': 0}
+21:35:10 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 1, 'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E860]  C: COMMIT
+21:35:10 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:10 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  S: SUCCESS {'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'name', 'group_id', 'created_at', 'summary', 'labels', 'attributes'], 'qid': 0}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 2, 'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  C: COMMIT
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  S: SUCCESS {'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  S: SUCCESS {'t_first': 0, 'fields': ['uuid', 'name', 'group_id', 'created_at', 'summary', 'labels', 'attributes'], 'qid': 0}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 0, 'db': 'neo4j'}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  C: COMMIT
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:10 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.pool | DEBUG | [#E860]  _: <POOL> released bolt-104890
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:10 | neo4j.io | DEBUG | [#E8C4]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.pool | DEBUG | [#E8C4]  _: <POOL> released bolt-104891
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:10 | neo4j.io | DEBUG | [#E8A6]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:10 | neo4j.pool | DEBUG | [#E8A6]  _: <POOL> released bolt-104884
+21:35:10 | graphiti_core.search.search | DEBUG | search returned context for query TechCorp in 437.58296966552734 ms
+21:35:10 | graphiti_core.search.search | DEBUG | search returned context for query Alice Chen in 439.4536018371582 ms
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | Sending 2 entities to LLM for deduplication with IDs 0-1 (actual IDs sent: [0, 1])
+21:35:10 | graphiti_core.utils.maintenance.node_operations | DEBUG | First 2 entities: [(0, 'Alice Chen'), (1, 'TechCorp')]
+    Neo4j Query #2: CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit})YIELD node AS n, score WHERE n.group_id IN $group_ids WITH n, score...
+    Neo4j Query #3: MATCH (n:Entity) WHERE n.group_id IN $group_ids WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score WHERE score > $min_score R...
+    Neo4j Query #4: CALL db.index.fulltext.queryNodes("node_name_and_summary", $query, {limit: $limit})YIELD node AS n, score WHERE n.group_id IN $group_ids WITH n, score...
+    Neo4j Query #5: MATCH (n:Entity) WHERE n.group_id IN $group_ids WITH n, vector.similarity.cosine(n.name_embedding, $search_vector) AS score WHERE score > $min_score R...
+      → 0 records, 84.9ms
+      → 0 records, 86.1ms
+      → 0 records, 63.7ms
+      → 0 records, 50.7ms
+   Span Start: zep.graphiti.llm.generate
+
+   LLM Call #2
+      Model: Qwen/Qwen2.5-32B-Instruct
+      [system]: You are a helpful assistant that determines whether or not ENTITIES extracted from a conversation are duplicates of existing entities.
+Do not escape unicode characters.
+
+
+Any extracted information sho...
+      [user]: 
+        <PREVIOUS MESSAGES>
+        []
+        </PREVIOUS MESSAGES>
+        <CURRENT MESSAGE>
+        Alice Chen(user): Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer.
+        <...
+      Response: {
+    "entity_resolutions": [
+        {
+            "id": 0,
+            "duplicate_idx": -1,
+            "name": "Alice Chen",
+            "duplicates": []
+        },
+        {
+            "id": 1,
+            "duplicate_idx": -1,
+            "name": "TechCorp",
+            "duplicates": []
+       ...
+      Tokens: prompt=663, completion=78
+{
+    "name": "zep.graphiti.llm.generate",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0x428aad2a7b38b1e5",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0xb58046870046001c",
+    "start_time": "2026-01-31T13:35:10.806065Z",
+    "end_time": "2026-01-31T13:35:12.084166Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "llm.provider": "openai",
+        "model.size": "medium",
+        "max_tokens": 4096,
+        "prompt.name": "dedupe_nodes.nodes"
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+21:35:12 | graphiti_core.utils.maintenance.node_operations | DEBUG | Received 2 resolutions for 2 entities
+21:35:12 | graphiti_core.utils.maintenance.node_operations | DEBUG | Resolved nodes: [('Alice Chen', '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8'), ('TechCorp', '10633107-3301-4b90-a8d3-96375555b786')]
+   Span End: zep.graphiti.llm.generate (1278.1ms)
+   Span Start: zep.graphiti.llm.generate
+
+   LLM Call #3
+      Model: Qwen/Qwen2.5-32B-Instruct
+      [system]: You are an expert fact extractor that extracts fact triples from text. 1. Extracted fact triples should also be extracted with relevant date information.2. Treat the CURRENT TIME as the time the CURRE...
+      [user]: 
+<FACT TYPES>
+[]
+</FACT TYPES>
+
+<PREVIOUS_MESSAGES>
+[]
+</PREVIOUS_MESSAGES>
+
+<CURRENT_MESSAGE>
+Alice Chen(user): Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer.
+</CURRENT_MESSAGE...
+      Response: {
+  "edges": [
+    {
+      "relation_type": "WORKS_AT",
+      "source_entity_id": 0,
+      "target_entity_id": 1,
+      "fact": "Alice Chen works at TechCorp as a senior software engineer.",
+      "valid_at": "2026-01-31T13:35:08.650972Z",
+      "invalid_at": null
+    }
+  ]
+}
+      Tokens: prompt=774, completion=100
+{
+    "name": "zep.graphiti.llm.generate",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0xcbb7e8c28433408a",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0xb58046870046001c",
+    "start_time": "2026-01-31T13:35:12.089345Z",
+    "end_time": "2026-01-31T13:35:14.338192Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "llm.provider": "openai",
+        "model.size": "medium",
+        "max_tokens": 4096,
+        "prompt.name": "extract_edges.edge"
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+21:35:14 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Extracted new edges: [Edge(relation_type='WORKS_AT', source_entity_id=0, target_entity_id=1, fact='Alice Chen works at TechCorp as a senior software engineer.', valid_at='2026-01-31T13:35:08.650972Z', invalid_at=None)] in 2251.4684200286865 ms
+21:35:14 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Created new edge: WORKS_AT from (UUID: 9fbefe48-8540-4878-ac2a-1f6d0e89c3e8) to (UUID: 10633107-3301-4b90-a8d3-96375555b786)
+21:35:14 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Extracted edges: [('WORKS_AT', '08460f7a-5d69-4776-9d0e-41eab8c9c508')]
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:14 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n            MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid})\n        \n            RETURN\n            \n        e.uuid AS uuid,\n        n.uuid AS source_node_uuid,\n        m.uuid AS target_node_uuid,\n        e.group_id AS group_id,\n        e.created_at AS created_at,\n        e.name AS name,\n        e.fact AS fact,\n        e.episodes AS episodes,\n        e.expired_at AS expired_at,\n        e.valid_at AS valid_at,\n        e.invalid_at AS invalid_at,\n    properties(e) AS attributes' {'database_': 'neo4j', 'source_node_uuid': '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8', 'target_node_uuid': '10633107-3301-4b90-a8d3-96375555b786'} {}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'source_node_uuid', 'target_node_uuid', 'group_id', 'created_at', 'name', 'fact', 'episodes', 'expired_at', 'valid_at', 'invalid_at', 'attributes'], 'qid': 0}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 0, 'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:14 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: RUN 'CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit})\n    YIELD relationship AS rel, score\n    MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)\n     WHERE e.uuid in $edge_uuids AND e.group_id IN $group_ids\n            WITH e, score, n, m\n            RETURN\n            \n        e.uuid AS uuid,\n        n.uuid AS source_node_uuid,\n        m.uuid AS target_node_uuid,\n        e.group_id AS group_id,\n        e.created_at AS created_at,\n        e.name AS name,\n        e.fact AS fact,\n        e.episodes AS episodes,\n        e.expired_at AS expired_at,\n        e.valid_at AS valid_at,\n        e.invalid_at AS invalid_at,\n    properties(e) AS attributes\n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'query': 'group_id:"demo_session_20260131_213508" AND (\\Alice Chen works at \\TechCorp as a senior software engineer.)', 'limit': 20, 'edge_uuids': [], 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:14 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> picked existing connection bolt-104890
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> handing out existing connection
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: RUN '\n        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)\n     WHERE e.uuid in $edge_uuids AND e.group_id IN $group_ids\n            WITH DISTINCT e, n, m, vector.similarity.cosine(e.fact_embedding, $search_vector) AS score\n            WHERE score > $min_score\n            RETURN\n            \n        e.uuid AS uuid,\n        n.uuid AS source_node_uuid,\n        m.uuid AS target_node_uuid,\n        e.group_id AS group_id,\n        e.created_at AS created_at,\n        e.name AS name,\n        e.fact AS fact,\n        e.episodes AS episodes,\n        e.expired_at AS expired_at,\n        e.valid_at AS valid_at,\n        e.invalid_at AS invalid_at,\n    properties(e) AS attributes\n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'search_vector': [-0.013257955200970173, -0.015912862494587898, 0.022474301978945732, -0.011397755704820156, -0.009202243760228157, -0.041002996265888214, 0.05689150467514992, -0.024919820949435234, 0.017458781599998474, -0.02334078960120678, -0.010725305415689945, 0.009378179907798767, 0.053836390376091, 0.0024091368541121483, 0.041189391165971756, 0.07866602391004562, -0.005644650664180517, -0.10255841165781021, 0.07732369005680084, -0.13494768738746643, -0.05164703354239464, -0.05514431744813919, -0.028271842747926712, -0.0495830737054348, 0.08801428228616714, -0.03237532079219818, 0.046238310635089874, -0.03207464516162872, -0.029837124049663544, -0.0036971874069422483, -0.08868484199047089, 0.06445253640413284, 0.06272193044424057, 0.034526482224464417, 0.028945382684469223, 0.1345175951719284, -0.01486134808510542, -0.0004463940276764333, 0.032225314527750015, 0.024852408096194267, -0.06454271823167801, -0.03644619882106781, 0.01648404821753502, -0.0676187053322792, 0.003350391983985901, -0.04298897460103035, 0.043950386345386505, -0.05258382484316826, 0.0026946261059492826, -0.011241059750318527, -0.025353549048304558, -0.04307291656732559, 0.023368552327156067, 0.005199712701141834, 0.049959976226091385, 0.08099187165498734, 0.08079038560390472, -0.01177383866161108, -0.004424453712999821, -0.02248760312795639, -0.013486065901815891, -0.018234647810459137, -0.031746674329042435, 0.0849938690662384, -0.05115899443626404, 0.029212305322289467, -0.04167128726840019, 0.017641175538301468, -0.024288345128297806, -0.09854233264923096, -0.0234883613884449, 0.007306263316422701, -0.09045425057411194, -0.013484431430697441, 0.08569757640361786, -0.05523984879255295, 0.0640760138630867, 0.01311318390071392, 0.07480356097221375, -0.01286950334906578, -0.002904487308114767, 0.018203428015112877, 0.030834611505270004, 0.04351795092225075, -0.08374970406293869, 0.08780159801244736, -0.03554806858301163, 0.01351228915154934, 0.006890776101499796, -0.006056651473045349, -0.043321408331394196, 0.009963898919522762, 0.043308746069669724, 0.03126123547554016, 0.06507500261068344, 0.008979327976703644, 0.04108082130551338, -0.0029665925540030003, -0.04505642503499985, 0.03293948248028755, 0.03913445025682449, 0.016532694920897484, 0.01346464641392231, -0.052764471620321274, -0.02068576216697693, 0.007660320028662682, 0.08685227483510971, 0.053129907697439194, 0.04006268456578255, -0.008289470337331295, 0.0068473657593131065, -0.028988899663090706, -0.06909265369176865, -0.04708145931363106, -0.012188255786895752, 0.024090230464935303, -0.008967208676040173, 0.1281299591064453, -0.04487980157136917, -0.046639975160360336, 0.062066249549388885, -0.017514795064926147, -0.03574998676776886, -0.007048582658171654, 0.06697411090135574, -0.012217625975608826, 0.013761878944933414, -1.0110489359559882e-33, 0.028891941532492638, 0.017711220309138298, 0.01535091083496809, 0.060568250715732574, 0.06549882143735886, 0.019289862364530563, 0.0202875304967165, 0.014157692901790142, -0.04921253025531769, -0.018745798617601395, -0.03959730640053749, 0.0734899640083313, -0.10726065933704376, -0.03825632855296135, 0.010155290365219116, 0.03326907753944397, -0.11207480728626251, 0.08332326263189316, -0.05495954304933548, 0.08304493874311447, 0.09503422677516937, -0.027756815776228905, -0.03672752529382706, 0.04772503674030304, 0.0013772858073934913, 0.04913291707634926, 0.09940346330404282, -0.013567342422902584, 0.08105787634849548, 0.018456893041729927, -0.05404140055179596, 0.0832393541932106, -0.0403514988720417, -0.022416431456804276, -0.05836453288793564, 0.08140704035758972, -0.0771106630563736, 0.0029587196186184883, 0.029982512816786766, 0.045893970876932144, 0.016188299283385277, 0.06226242706179619, 0.11063199490308762, -0.04372628033161163, -0.04917727783322334, -0.018524110317230225, 0.09666956216096878, -0.09131338447332382, 0.10999982059001923, 0.04972578212618828, -0.044775206595659256, -0.019292553886771202, 0.04680546745657921, 0.04289110377430916, 0.07834839075803757, -0.12287382781505585, 0.03954586759209633, 0.027772409841418266, 0.010959158651530743, 0.03573070093989372, -0.07059632986783981, -0.0025238324888050556, -0.03298184275627136, 0.0670282170176506, -0.02868322655558586, 0.02340620383620262, 0.058071523904800415, -0.024166805669665337, 0.07107376307249069, 0.08040976524353027, -0.003882206976413727, -0.006926200818270445, 0.023054271936416626, -0.046903107315301895, -0.11292973905801773, -0.006855137180536985, -0.06983733922243118, -0.03037869930267334, 0.002939032856374979, 0.022304266691207886, -0.015413638204336166, -0.02588549070060253, 0.06358949095010757, 0.02565685100853443, -0.009684687480330467, -0.015718162059783936, -0.030091561377048492, 0.013977618888020515, 0.038848474621772766, 0.0328696072101593, -0.07472623884677887, -0.02583683840930462, -0.023194966837763786, 0.09224781394004822, -0.030403899028897285, -2.705189887734108e-35, -0.07455073297023773, -0.038252197206020355, -0.023138219490647316, 0.012809467501938343, 0.013806551694869995, -0.056318238377571106, 0.0386042445898056, 0.03124651499092579, 0.017258241772651672, 0.007525989785790443, 0.016290264204144478, 0.03940705582499504, -0.10332529246807098, 0.04388686269521713, -0.007754395250231028, -0.02439066767692566, 0.0582587867975235, -0.060740403831005096, -0.06641947478055954, -0.011700223200023174, 0.0006734702037647367, 0.00045597561984322965, -0.06338997930288315, 0.01708640530705452, 0.1199985221028328, 0.07149829715490341, 0.08530404418706894, -0.04217680171132088, -0.025495745241642, 0.020906798541545868, -0.04559079557657242, -0.018681026995182037, -0.07994532585144043, 0.0557277575135231, 0.007867338135838509, -0.04401851072907448, -0.045731984078884125, -0.009711547754704952, -0.008993278257548809, -0.10723228007555008, 0.0902300775051117, -0.07352051138877869, -0.03575049340724945, 0.03132779896259308, 0.04104148969054222, -0.011257542297244072, 0.013920219615101814, -0.032731860876083374, 0.0003591700515244156, -0.03797173872590065, -0.07122282683849335, -0.07210473716259003, 0.07079171389341354, 0.004715309478342533, -0.024251196533441544, -0.018947364762425423, 0.02481425367295742, 0.04497029259800911, 0.0692000463604927, -0.08144833147525787, -0.007840503938496113, 0.017743615433573723, 0.10525724291801453, 0.014499381184577942, -0.10702764242887497, 0.015772363170981407, 0.07101278007030487, -0.006376929115504026, -0.08806062489748001, -0.03499555587768555, 0.09833797067403793, 0.014344322495162487, -0.05085496976971626, -0.05848661810159683, -0.04394885525107384, 0.01709138974547386, -0.0385279580950737, -0.0466882549226284, -0.1008477658033371, -0.028019817546010017, 0.0005975878448225558, -0.03078717738389969, 0.032327014952898026, 0.08636932075023651, -0.0367610789835453, 0.06717456877231598, -0.010541483759880066, -0.023307526484131813, -0.015674574300646782, -0.022076504305005074, -0.06754915416240692, -0.013176998123526573, -0.009013712406158447, -0.03318965062499046, -0.07350445538759232, -1.912632541234416e-08, -0.09411327540874481, 0.026125334203243256, -0.05477745085954666, -0.06962316483259201, -0.05342530831694603, 0.05361509695649147, 0.010720365680754185, 0.009806341491639614, 0.0295454990118742, 0.016098638996481895, 0.000522896065376699, -0.04540421441197395, 0.026533108204603195, 0.0550837405025959, 0.14215995371341705, 0.02374192699790001, 0.030221296474337578, 0.042863860726356506, -0.042724039405584335, -0.08332221210002899, 0.014076410792768002, -0.014681474305689335, 0.06747693568468094, 0.0005874659982509911, -0.08252903074026108, 0.04909428581595421, 0.007984612137079239, 0.050028689205646515, 0.011538504622876644, 0.030580533668398857, -0.06654371321201324, 0.049159761518239975, -0.05192546918988228, 0.02944636158645153, 0.08294067531824112, -0.06863240152597427, 0.06067385524511337, 0.0244646854698658, 0.03127187490463257, 0.03027264028787613, -0.07277819514274597, -0.06304372847080231, 0.04836493730545044, 0.013498152606189251, -0.015036684460937977, -0.08360060304403305, -0.0006338348612189293, -0.0377950556576252, 0.06715524196624756, 0.03157944977283478, 0.05579643324017525, -0.01985928602516651, -0.0454988107085228, -0.023539958521723747, -0.06404399126768112, 0.025923820212483406, 0.017355164512991905, -0.07923995703458786, -0.0841844379901886, 0.009729486890137196, -0.011746631935238838, -0.0555831603705883, 0.06967933475971222, -0.026095012202858925], 'limit': 20, 'min_score': 0.6, 'edge_uuids': [], 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: PULL {'n': 1000}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'source_node_uuid', 'target_node_uuid', 'group_id', 'created_at', 'name', 'fact', 'episodes', 'expired_at', 'valid_at', 'invalid_at', 'attributes'], 'qid': 0}
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 1, 'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: COMMIT
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> released bolt-104890
+   Span End: zep.graphiti.llm.generate (2248.8ms)
+    Neo4j Query #6: MATCH (n:Entity {uuid: $source_node_uuid})-[e:RELATES_TO]->(m:Entity {uuid: $target_node_uuid}) RETURN e.uuid AS uuid, n.uuid AS source_node_uuid, m.u...
+      → 0 records, 27.2ms
+    Neo4j Query #7: CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) YIELD relationship AS rel, score MATCH (n:Entity)-[e:RELATES_...
+    Neo4j Query #8: MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity) WHERE e.uuid in $edge_uuids AND e.group_id IN $group_ids WITH DISTINCT e, n, m, vector.similarity.cosine(e...
+      → 0 records, 29.3ms
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 156, 'fields': ['uuid', 'source_node_uuid', 'target_node_uuid', 'group_id', 'created_at', 'name', 'fact', 'episodes', 'expired_at', 'valid_at', 'invalid_at', 'attributes'], 'qid': 0}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 1, 'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+21:35:14 | graphiti_core.search.search | DEBUG | search returned context for query Alice Chen works at TechCorp as a senior software engineer. in 190.22393226623535 ms
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:14 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: RUN 'CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit})\n    YIELD relationship AS rel, score\n    MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)\n     WHERE e.group_id IN $group_ids\n            WITH e, score, n, m\n            RETURN\n            \n        e.uuid AS uuid,\n        n.uuid AS source_node_uuid,\n        m.uuid AS target_node_uuid,\n        e.group_id AS group_id,\n        e.created_at AS created_at,\n        e.name AS name,\n        e.fact AS fact,\n        e.episodes AS episodes,\n        e.expired_at AS expired_at,\n        e.valid_at AS valid_at,\n        e.invalid_at AS invalid_at,\n    properties(e) AS attributes\n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'query': 'group_id:"demo_session_20260131_213508" AND (\\Alice Chen works at \\TechCorp as a senior software engineer.)', 'limit': 20, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: None
+21:35:14 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: None
+21:35:14 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='READ', database=AcquisitionDatabase(name=None, guessed=False)
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> picked existing connection bolt-104890
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> handing out existing connection
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: BEGIN {'mode': 'r', 'bookmarks': ['FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ']}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: RUN '\n        MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)\n     WHERE e.group_id IN $group_ids\n            WITH DISTINCT e, n, m, vector.similarity.cosine(e.fact_embedding, $search_vector) AS score\n            WHERE score > $min_score\n            RETURN\n            \n        e.uuid AS uuid,\n        n.uuid AS source_node_uuid,\n        m.uuid AS target_node_uuid,\n        e.group_id AS group_id,\n        e.created_at AS created_at,\n        e.name AS name,\n        e.fact AS fact,\n        e.episodes AS episodes,\n        e.expired_at AS expired_at,\n        e.valid_at AS valid_at,\n        e.invalid_at AS invalid_at,\n    properties(e) AS attributes\n            ORDER BY score DESC\n            LIMIT $limit\n            ' {'database_': 'neo4j', 'search_vector': [-0.013257955200970173, -0.015912862494587898, 0.022474301978945732, -0.011397755704820156, -0.009202243760228157, -0.041002996265888214, 0.05689150467514992, -0.024919820949435234, 0.017458781599998474, -0.02334078960120678, -0.010725305415689945, 0.009378179907798767, 0.053836390376091, 0.0024091368541121483, 0.041189391165971756, 0.07866602391004562, -0.005644650664180517, -0.10255841165781021, 0.07732369005680084, -0.13494768738746643, -0.05164703354239464, -0.05514431744813919, -0.028271842747926712, -0.0495830737054348, 0.08801428228616714, -0.03237532079219818, 0.046238310635089874, -0.03207464516162872, -0.029837124049663544, -0.0036971874069422483, -0.08868484199047089, 0.06445253640413284, 0.06272193044424057, 0.034526482224464417, 0.028945382684469223, 0.1345175951719284, -0.01486134808510542, -0.0004463940276764333, 0.032225314527750015, 0.024852408096194267, -0.06454271823167801, -0.03644619882106781, 0.01648404821753502, -0.0676187053322792, 0.003350391983985901, -0.04298897460103035, 0.043950386345386505, -0.05258382484316826, 0.0026946261059492826, -0.011241059750318527, -0.025353549048304558, -0.04307291656732559, 0.023368552327156067, 0.005199712701141834, 0.049959976226091385, 0.08099187165498734, 0.08079038560390472, -0.01177383866161108, -0.004424453712999821, -0.02248760312795639, -0.013486065901815891, -0.018234647810459137, -0.031746674329042435, 0.0849938690662384, -0.05115899443626404, 0.029212305322289467, -0.04167128726840019, 0.017641175538301468, -0.024288345128297806, -0.09854233264923096, -0.0234883613884449, 0.007306263316422701, -0.09045425057411194, -0.013484431430697441, 0.08569757640361786, -0.05523984879255295, 0.0640760138630867, 0.01311318390071392, 0.07480356097221375, -0.01286950334906578, -0.002904487308114767, 0.018203428015112877, 0.030834611505270004, 0.04351795092225075, -0.08374970406293869, 0.08780159801244736, -0.03554806858301163, 0.01351228915154934, 0.006890776101499796, -0.006056651473045349, -0.043321408331394196, 0.009963898919522762, 0.043308746069669724, 0.03126123547554016, 0.06507500261068344, 0.008979327976703644, 0.04108082130551338, -0.0029665925540030003, -0.04505642503499985, 0.03293948248028755, 0.03913445025682449, 0.016532694920897484, 0.01346464641392231, -0.052764471620321274, -0.02068576216697693, 0.007660320028662682, 0.08685227483510971, 0.053129907697439194, 0.04006268456578255, -0.008289470337331295, 0.0068473657593131065, -0.028988899663090706, -0.06909265369176865, -0.04708145931363106, -0.012188255786895752, 0.024090230464935303, -0.008967208676040173, 0.1281299591064453, -0.04487980157136917, -0.046639975160360336, 0.062066249549388885, -0.017514795064926147, -0.03574998676776886, -0.007048582658171654, 0.06697411090135574, -0.012217625975608826, 0.013761878944933414, -1.0110489359559882e-33, 0.028891941532492638, 0.017711220309138298, 0.01535091083496809, 0.060568250715732574, 0.06549882143735886, 0.019289862364530563, 0.0202875304967165, 0.014157692901790142, -0.04921253025531769, -0.018745798617601395, -0.03959730640053749, 0.0734899640083313, -0.10726065933704376, -0.03825632855296135, 0.010155290365219116, 0.03326907753944397, -0.11207480728626251, 0.08332326263189316, -0.05495954304933548, 0.08304493874311447, 0.09503422677516937, -0.027756815776228905, -0.03672752529382706, 0.04772503674030304, 0.0013772858073934913, 0.04913291707634926, 0.09940346330404282, -0.013567342422902584, 0.08105787634849548, 0.018456893041729927, -0.05404140055179596, 0.0832393541932106, -0.0403514988720417, -0.022416431456804276, -0.05836453288793564, 0.08140704035758972, -0.0771106630563736, 0.0029587196186184883, 0.029982512816786766, 0.045893970876932144, 0.016188299283385277, 0.06226242706179619, 0.11063199490308762, -0.04372628033161163, -0.04917727783322334, -0.018524110317230225, 0.09666956216096878, -0.09131338447332382, 0.10999982059001923, 0.04972578212618828, -0.044775206595659256, -0.019292553886771202, 0.04680546745657921, 0.04289110377430916, 0.07834839075803757, -0.12287382781505585, 0.03954586759209633, 0.027772409841418266, 0.010959158651530743, 0.03573070093989372, -0.07059632986783981, -0.0025238324888050556, -0.03298184275627136, 0.0670282170176506, -0.02868322655558586, 0.02340620383620262, 0.058071523904800415, -0.024166805669665337, 0.07107376307249069, 0.08040976524353027, -0.003882206976413727, -0.006926200818270445, 0.023054271936416626, -0.046903107315301895, -0.11292973905801773, -0.006855137180536985, -0.06983733922243118, -0.03037869930267334, 0.002939032856374979, 0.022304266691207886, -0.015413638204336166, -0.02588549070060253, 0.06358949095010757, 0.02565685100853443, -0.009684687480330467, -0.015718162059783936, -0.030091561377048492, 0.013977618888020515, 0.038848474621772766, 0.0328696072101593, -0.07472623884677887, -0.02583683840930462, -0.023194966837763786, 0.09224781394004822, -0.030403899028897285, -2.705189887734108e-35, -0.07455073297023773, -0.038252197206020355, -0.023138219490647316, 0.012809467501938343, 0.013806551694869995, -0.056318238377571106, 0.0386042445898056, 0.03124651499092579, 0.017258241772651672, 0.007525989785790443, 0.016290264204144478, 0.03940705582499504, -0.10332529246807098, 0.04388686269521713, -0.007754395250231028, -0.02439066767692566, 0.0582587867975235, -0.060740403831005096, -0.06641947478055954, -0.011700223200023174, 0.0006734702037647367, 0.00045597561984322965, -0.06338997930288315, 0.01708640530705452, 0.1199985221028328, 0.07149829715490341, 0.08530404418706894, -0.04217680171132088, -0.025495745241642, 0.020906798541545868, -0.04559079557657242, -0.018681026995182037, -0.07994532585144043, 0.0557277575135231, 0.007867338135838509, -0.04401851072907448, -0.045731984078884125, -0.009711547754704952, -0.008993278257548809, -0.10723228007555008, 0.0902300775051117, -0.07352051138877869, -0.03575049340724945, 0.03132779896259308, 0.04104148969054222, -0.011257542297244072, 0.013920219615101814, -0.032731860876083374, 0.0003591700515244156, -0.03797173872590065, -0.07122282683849335, -0.07210473716259003, 0.07079171389341354, 0.004715309478342533, -0.024251196533441544, -0.018947364762425423, 0.02481425367295742, 0.04497029259800911, 0.0692000463604927, -0.08144833147525787, -0.007840503938496113, 0.017743615433573723, 0.10525724291801453, 0.014499381184577942, -0.10702764242887497, 0.015772363170981407, 0.07101278007030487, -0.006376929115504026, -0.08806062489748001, -0.03499555587768555, 0.09833797067403793, 0.014344322495162487, -0.05085496976971626, -0.05848661810159683, -0.04394885525107384, 0.01709138974547386, -0.0385279580950737, -0.0466882549226284, -0.1008477658033371, -0.028019817546010017, 0.0005975878448225558, -0.03078717738389969, 0.032327014952898026, 0.08636932075023651, -0.0367610789835453, 0.06717456877231598, -0.010541483759880066, -0.023307526484131813, -0.015674574300646782, -0.022076504305005074, -0.06754915416240692, -0.013176998123526573, -0.009013712406158447, -0.03318965062499046, -0.07350445538759232, -1.912632541234416e-08, -0.09411327540874481, 0.026125334203243256, -0.05477745085954666, -0.06962316483259201, -0.05342530831694603, 0.05361509695649147, 0.010720365680754185, 0.009806341491639614, 0.0295454990118742, 0.016098638996481895, 0.000522896065376699, -0.04540421441197395, 0.026533108204603195, 0.0550837405025959, 0.14215995371341705, 0.02374192699790001, 0.030221296474337578, 0.042863860726356506, -0.042724039405584335, -0.08332221210002899, 0.014076410792768002, -0.014681474305689335, 0.06747693568468094, 0.0005874659982509911, -0.08252903074026108, 0.04909428581595421, 0.007984612137079239, 0.050028689205646515, 0.011538504622876644, 0.030580533668398857, -0.06654371321201324, 0.049159761518239975, -0.05192546918988228, 0.02944636158645153, 0.08294067531824112, -0.06863240152597427, 0.06067385524511337, 0.0244646854698658, 0.03127187490463257, 0.03027264028787613, -0.07277819514274597, -0.06304372847080231, 0.04836493730545044, 0.013498152606189251, -0.015036684460937977, -0.08360060304403305, -0.0006338348612189293, -0.0377950556576252, 0.06715524196624756, 0.03157944977283478, 0.05579643324017525, -0.01985928602516651, -0.0454988107085228, -0.023539958521723747, -0.06404399126768112, 0.025923820212483406, 0.017355164512991905, -0.07923995703458786, -0.0841844379901886, 0.009729486890137196, -0.011746631935238838, -0.0555831603705883, 0.06967933475971222, -0.026095012202858925], 'limit': 20, 'min_score': 0.6, 'group_ids': ['demo_session_20260131_213508']} {}
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: PULL {'n': 1000}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'t_first': 1, 'fields': ['uuid', 'source_node_uuid', 'target_node_uuid', 'group_id', 'created_at', 'name', 'fact', 'episodes', 'expired_at', 'valid_at', 'invalid_at', 'attributes'], 'qid': 0}
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 1, 'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  C: COMMIT
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.io | DEBUG | [#E860]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:14 | neo4j.io | DEBUG | [#E860]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.pool | DEBUG | [#E860]  _: <POOL> released bolt-104890
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 93, 'fields': ['uuid', 'source_node_uuid', 'target_node_uuid', 'group_id', 'created_at', 'name', 'fact', 'episodes', 'expired_at', 'valid_at', 'invalid_at', 'attributes'], 'qid': 0}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'statuses': [{'gql_status': '02000', 'status_description': 'note: no data'}], 'type': 'r', 't_last': 1, 'db': 'neo4j'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkeQ'}
+21:35:14 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:14 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+21:35:14 | graphiti_core.search.search | DEBUG | search returned context for query Alice Chen works at TechCorp as a senior software engineer. in 138.52834701538086 ms
+21:35:14 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Related edges lists: []
+21:35:14 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Resolved edges: [('WORKS_AT', '08460f7a-5d69-4776-9d0e-41eab8c9c508')]
+      → 0 records, 180.5ms
+    Neo4j Query #9: CALL db.index.fulltext.queryRelationships("edge_name_and_fact", $query, {limit: $limit}) YIELD relationship AS rel, score MATCH (n:Entity)-[e:RELATES_...
+    Neo4j Query #10: MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity) WHERE e.group_id IN $group_ids WITH DISTINCT e, n, m, vector.similarity.cosine(e.fact_embedding, $search_v...
+      → 0 records, 29.5ms
+      → 0 records, 121.4ms
+   Span Start: zep.graphiti.llm.generate
+
+   LLM Call #4
+      Model: Qwen/Qwen2.5-32B-Instruct
+      [system]: You are a helpful assistant that extracts entity summaries from the provided text.
+Do not escape unicode characters.
+
+
+Any extracted information should be returned in the same language as it was writt...
+      [user]: 
+        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary.
+
+      ...
+   Span Start: zep.graphiti.llm.generate
+
+   LLM Call #5
+      Model: Qwen/Qwen2.5-32B-Instruct
+      [system]: You are a helpful assistant that extracts entity summaries from the provided text.
+Do not escape unicode characters.
+
+
+Any extracted information should be returned in the same language as it was writt...
+      [user]: 
+        Given the MESSAGES and the ENTITY, update the summary that combines relevant information about the entity
+        from the messages and relevant information from the existing summary.
+
+      ...
+      Response: {"summary": "TechCorp employs Alice Chen as a senior software engineer."}
+      Tokens: prompt=425, completion=17
+{
+    "name": "zep.graphiti.llm.generate",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0xb458befaf1cd748a",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0xb58046870046001c",
+    "start_time": "2026-01-31T13:35:14.765473Z",
+    "end_time": "2026-01-31T13:35:15.299268Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "llm.provider": "openai",
+        "model.size": "small",
+        "max_tokens": 4096,
+        "prompt.name": "extract_nodes.extract_summary"
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+   Span End: zep.graphiti.llm.generate (533.8ms)
+      Response: {"summary": "Alice Chen works at TechCorp as a senior software engineer."}
+      Tokens: prompt=425, completion=18
+{
+    "name": "zep.graphiti.llm.generate",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0x68bbc89dee51a4b2",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": "0xb58046870046001c",
+    "start_time": "2026-01-31T13:35:14.760551Z",
+    "end_time": "2026-01-31T13:35:15.326233Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "llm.provider": "openai",
+        "model.size": "small",
+        "max_tokens": 4096,
+        "prompt.name": "extract_nodes.extract_summary"
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+21:35:15 | graphiti_core.utils.maintenance.edge_operations | DEBUG | Built episodic edges: [EpisodicEdge(uuid='44fc1b93-95b5-4f90-bc87-961d5e85b1ec', group_id='demo_session_20260131_213508', source_node_uuid='03013a24-a05b-4ed8-b57a-28dad9073f35', target_node_uuid='9fbefe48-8540-4878-ac2a-1f6d0e89c3e8', created_at=datetime.datetime(2026, 1, 31, 13, 35, 8, 650993, tzinfo=datetime.timezone.utc)), EpisodicEdge(uuid='ed03c81c-f8e0-4228-a923-43556a5f12ea', group_id='demo_session_20260131_213508', source_node_uuid='03013a24-a05b-4ed8-b57a-28dad9073f35', target_node_uuid='10633107-3301-4b90-a8d3-96375555b786', created_at=datetime.datetime(2026, 1, 31, 13, 35, 8, 650993, tzinfo=datetime.timezone.utc))]
+21:35:15 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> routing towards fixed database: neo4j
+21:35:15 | neo4j | DEBUG | [#0000]  _: <WORKSPACE> pinning database: 'neo4j'
+21:35:15 | neo4j.pool | DEBUG | [#0000]  _: <POOL> acquire direct connection, access_mode='WRITE', database=AcquisitionDatabase(name='neo4j', guessed=False)
+21:35:15 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> picked existing connection bolt-104875
+21:35:15 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> checked re_auth auth=None updated=False force=False
+21:35:15 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> handing out existing connection
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: BEGIN {'db': 'neo4j'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: READY > TX_READY_OR_TX_STREAMING
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: READY > TX_READY_OR_TX_STREAMING
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n                UNWIND $episodes AS episode\n                MERGE (n:Episodic {uuid: episode.uuid})\n                SET n = {uuid: episode.uuid, name: episode.name, group_id: episode.group_id, source_description: episode.source_description, source: episode.source, content: episode.content, \n                entity_edges: episode.entity_edges, created_at: episode.created_at, valid_at: episode.valid_at}\n                RETURN n.uuid AS uuid\n            ' {'episodes': [{'uuid': '03013a24-a05b-4ed8-b57a-28dad9073f35', 'name': 'Alice Chen', 'group_id': 'demo_session_20260131_213508', 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 8, 650993, tzinfo=datetime.timezone.utc), 'source': 'message', 'source_description': 'Agent conversation message', 'content': "Alice Chen(user): Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer.", 'valid_at': datetime.datetime(2026, 1, 31, 13, 35, 8, 650972, tzinfo=datetime.timezone.utc), 'entity_edges': ['08460f7a-5d69-4776-9d0e-41eab8c9c508']}]} {}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 1, 'fields': ['uuid'], 'qid': 0}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n                    UNWIND $nodes AS node\n                    MERGE (n:Entity {uuid: node.uuid})\n                    SET n:$(node.labels)\n                    SET n = node\n                    WITH n, node CALL db.create.setNodeVectorProperty(n, "name_embedding", node.name_embedding)\n                RETURN n.uuid AS uuid\n            ' {'nodes': [{'uuid': '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8', 'name': 'Alice Chen', 'group_id': 'demo_session_20260131_213508', 'summary': 'Alice Chen works at TechCorp as a senior software engineer.', 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 10, 356859, tzinfo=datetime.timezone.utc), 'name_embedding': [-0.026355842128396034, 0.01325964741408825, -0.03123941458761692, 0.05565181002020836, -0.021013621240854263, 0.04512761905789375, 0.12929201126098633, -0.01254021655768156, 0.03281579539179802, 0.006521471776068211, -0.005904946476221085, -0.03658685088157654, 0.042848460376262665, -0.0075250961817801, -0.023021776229143143, 0.11054187268018723, 0.010219978168606758, -0.042499568313360214, 0.019017336890101433, -0.07608968019485474, -0.13376878201961517, -0.03232574090361595, -0.018285753205418587, -0.022637564688920975, 0.05376994237303734, -0.022374911233782768, 0.03646726906299591, -0.05779257044196129, 0.0012576642911881208, -0.06428270787000656, -0.030370045453310013, 0.0642942264676094, 0.03901150822639465, 0.011392112821340561, -0.01739480346441269, 0.09479715675115585, -0.03670905530452728, -0.0030228146351873875, 0.05700371041893959, 0.061914052814245224, -0.023507071658968925, -0.04538993164896965, 0.018170667812228203, -0.09681395441293716, -0.014017882756888866, -0.005258884280920029, 0.056503601372241974, 0.028119899332523346, -0.02629508450627327, -0.0054064784198999405, -0.012937781400978565, -0.006439867429435253, -0.059024516493082047, 0.025439124554395676, 0.048410505056381226, 0.03658035025000572, 0.07683489471673965, 0.0024799660313874483, -0.025990450754761696, -0.01675312966108322, -0.022672297433018684, 0.04118428751826286, -0.008922669105231762, 0.0476997010409832, -0.026831338182091713, 0.04183236509561539, -0.03166991472244263, 0.0115780308842659, -0.013250049203634262, -0.018381424248218536, -0.03548746556043625, 0.047460511326789856, -0.08344292640686035, -0.03819549083709717, 0.04908224940299988, -0.07479158788919449, 0.061932794749736786, -0.03451530635356903, 0.03825297951698303, 0.03824131563305855, -0.06453172862529755, -0.011967931874096394, 0.029251251369714737, -0.003771973541006446, -0.04279826954007149, 0.07970042526721954, -0.03534647822380066, -0.016085540875792503, -0.03445926308631897, -0.06758332997560501, -0.06803494691848755, 0.04568883776664734, 0.03702521324157715, 0.037402816116809845, 0.041505116969347, 0.03652043640613556, 0.022399218752980232, -0.04493120685219765, -0.039846789091825485, 0.1558452993631363, 0.06930948048830032, 0.06630665063858032, -0.022137505933642387, -0.029149578884243965, 0.03287988901138306, -0.06723719090223312, 0.07750950008630753, -0.014444703236222267, -0.008659232407808304, -0.015648337081074715, 0.04050087183713913, -0.054106056690216064, -0.019519448280334473, -0.05157645791769028, 0.058186743408441544, 0.010076092556118965, 0.025826068595051765, 0.1045052707195282, -0.06625799834728241, -0.04678981751203537, 0.05726945772767067, -0.057046450674533844, -0.026757480576634407, 0.017750224098563194, 0.03007330372929573, -0.014178632758557796, 0.041757430881261826, -1.5362763422926947e-33, 0.002108874963596463, -0.050530705600976944, 0.059171419590711594, -0.009861056692898273, 0.06120507791638374, 0.05001093074679375, 0.04546564444899559, -0.0439346618950367, -0.022026460617780685, 0.0014880731469020247, -0.03617876395583153, -0.011359072290360928, -0.10034970194101334, -0.05947431921958923, 0.020383372902870178, 0.07848890870809555, -0.07971902191638947, 0.07296567410230637, -0.06161768361926079, 0.05630829930305481, 0.1361342966556549, 0.08937987685203552, -0.029327500611543655, 0.0699060708284378, -0.00417146272957325, 0.019862433895468712, 0.13937044143676758, -0.05120294913649559, 0.04876798018813133, -0.0005354302120395005, 0.0258288886398077, 0.052600737661123276, -0.004160192795097828, 0.031495094299316406, -0.0692664384841919, -0.002921398961916566, -0.05118492990732193, 0.013015015050768852, -0.014923220500349998, 0.019789360463619232, 0.02590189315378666, -0.017075158655643463, 0.14261028170585632, -0.08737364411354065, -0.07588749378919601, 0.006220188923180103, 0.0696755200624466, -0.04459672421216965, 0.0013796762796118855, 0.024149838835000992, 0.00802000891417265, 0.012482338584959507, -0.010259635746479034, 0.08851812034845352, 0.06670058518648148, -0.1325545459985733, 0.018631109967827797, 0.015401056036353111, -0.013076604343950748, 0.04545596241950989, -0.04068077728152275, -0.059218600392341614, -0.02083008736371994, 0.04339516535401344, -0.03370627388358116, -0.050805509090423584, 0.04784303903579712, -0.05853618308901787, 0.034618865698575974, 0.010591198690235615, -0.024871740490198135, -0.006305110175162554, 0.04472888261079788, -0.06334415078163147, -0.07098566740751266, -0.034425992518663406, -0.0319572389125824, -0.040237054228782654, -0.011668861843645573, -0.009921743534505367, -0.05259842425584793, 0.0330997109413147, 0.03726525232195854, 0.005469031631946564, -0.06024039536714554, -0.09134622663259506, -0.049536943435668945, 0.0034234081394970417, 0.008246117271482944, 0.0043776920065283775, -0.09959103167057037, 0.02363327518105507, 0.017389599233865738, 0.02782953344285488, -0.024334117770195007, 1.566308386246281e-33, -0.07471038401126862, -0.019663669168949127, -0.010429508052766323, 0.05440014228224754, 0.08643398433923721, -0.05449403449892998, 0.053397420793771744, 0.07361898571252823, 0.04549533128738403, -0.03758566454052925, -0.004163020756095648, -0.043809983879327774, -0.012282841838896275, 0.029449544847011566, 0.06610804051160812, -0.03817789629101753, 0.07184673845767975, 0.012702271342277527, -0.03365994989871979, 0.016136499121785164, -0.006881953217089176, -0.02202904410660267, -0.06492672860622406, -0.050101619213819504, 0.09308953583240509, 0.11385616660118103, 0.15031279623508453, -0.06801961362361908, -0.053482066839933395, 0.03752119094133377, -0.054881490767002106, -0.03859531879425049, -0.09455815702676773, 0.034267608076334, -0.011094218119978905, 0.010718969628214836, -0.0407571978867054, 0.019553309306502342, -0.07066164910793304, -0.05140780657529831, 0.07492438703775406, -0.0067253257147967815, -0.010825724340975285, 0.10406211763620377, 0.046868931502103806, -0.03548797219991684, -0.041724614799022675, 0.024402964860200882, 0.01762327179312706, 0.03239086642861366, -0.1395357996225357, -0.05901215597987175, 0.023498473688960075, 0.008859630674123764, -0.011638352647423744, -0.029226146638393402, 0.008874417282640934, 0.06741739064455032, 0.15705494582653046, -0.027077175676822662, -0.05709275230765343, 0.04620066285133362, 0.011166158132255077, 0.027924155816435814, -0.09857237339019775, -0.006786038633435965, 0.022794559597969055, -0.02090008370578289, -0.0189130287617445, -0.060991428792476654, 0.11378229409456253, 0.031142720952630043, -0.07172193378210068, 0.02203940413892269, -0.02188713103532791, 0.06362458318471909, -0.06930588185787201, 0.029606888070702553, -0.03542408347129822, 0.013812887482345104, -0.031423065811395645, -0.04199037700891495, 0.00221935473382473, 0.08181841671466827, 0.008770052343606949, 0.065360888838768, 0.017235910519957542, -0.008062401786446571, 0.018537012860178947, 0.0077066426165401936, -0.00889023020863533, -0.014530003070831299, -0.00728809367865324, -0.05414712429046631, -0.04535195231437683, -1.1776275954389348e-08, -0.08916942030191422, 0.01235968992114067, -0.04687945917248726, -0.028432749211788177, -0.007776240818202496, 0.058875009417533875, 0.0722852274775505, 0.010020192712545395, -0.02417520433664322, 0.02755662240087986, 0.04600527882575989, -0.02899683080613613, 0.07253126800060272, 0.04168358072638512, 0.09452751278877258, -0.03317136690020561, 0.025137143209576607, -0.011572047136723995, -0.02130044251680374, -0.05349064618349075, 0.007440172601491213, -0.031220121309161186, 0.06216119974851608, -0.06768105179071426, -0.06877601146697998, 0.0550718754529953, -0.04570503905415535, 0.03657346963882446, -0.003110588062554598, 0.03250838816165924, -0.01681230589747429, 0.0588655062019825, -0.0225375983864069, -0.001758615835569799, 0.037617046386003494, 0.03610309213399887, -0.0035550708416849375, 0.024369610473513603, 0.0024036697577685118, 0.05777854099869728, -0.08994634449481964, -0.006505818106234074, 0.07513695955276489, -0.032711997628211975, -0.009561094455420971, -0.12188789993524551, 0.03437691554427147, -0.09762433171272278, 0.09146109223365784, 0.044234149158000946, -0.005077491980046034, -0.06700272113084793, 0.044892922043800354, -0.034284524619579315, -0.005417755804955959, 0.0436774343252182, 0.025720594450831413, -0.04965644329786301, -0.06739189475774765, 0.05100289359688759, -0.007592913694679737, -0.037290748208761215, 0.01670803315937519, -0.02741333283483982], 'labels': ['Entity']}, {'uuid': '10633107-3301-4b90-a8d3-96375555b786', 'name': 'TechCorp', 'group_id': 'demo_session_20260131_213508', 'summary': 'TechCorp employs Alice Chen as a senior software engineer.', 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 10, 358078, tzinfo=datetime.timezone.utc), 'name_embedding': [-0.021573590114712715, -0.012347658164799213, 0.05114714801311493, -0.0450495220720768, -0.040291108191013336, -0.06301240622997284, 0.15784123539924622, 0.02499924972653389, 0.028567343950271606, -0.057180870324373245, 0.06758309155702591, -0.02094287984073162, 0.06579514592885971, 0.02900475636124611, -0.0013209818862378597, -0.05683525651693344, 0.02907436713576317, -0.08313947916030884, 0.03274289146065712, -0.10951676219701767, 0.0037689076270908117, -0.03170592337846756, -0.035755451768636703, 0.06925734877586365, 0.01348133571445942, 0.03227928653359413, -0.005691573955118656, 0.05115944892168045, -0.05110306665301323, -0.06216280162334442, -0.12067117542028427, 0.0554843470454216, 0.008498817682266235, -0.006388494279235601, 0.056648265570402145, 0.07461311668157578, -0.026781857013702393, 0.019609360024333, 0.06548252701759338, -0.07936568558216095, -0.0643572211265564, -0.11321882158517838, 0.01874917559325695, 0.0039882720448076725, 0.04936899244785309, -0.04614740610122681, 0.029530277475714684, -0.04378291219472885, 0.0961722880601883, 0.07531148195266724, 0.006902564782649279, -0.06455326825380325, 0.024319950491189957, 0.059384290128946304, 0.013490313664078712, -0.001707117771729827, 0.01645989902317524, -0.015925943851470947, 0.04449696093797684, -0.041630472987890244, 0.08270712941884995, -0.12345372885465622, -0.041280560195446014, 0.06592756509780884, 0.06952199339866638, 0.04413216561079025, -0.04334152862429619, 0.05232682451605797, -0.08780115097761154, -0.11635064333677292, 0.048840757459402084, -0.037341512739658356, 0.047288380563259125, 0.07372705638408661, 0.018078146502375603, 0.05094928666949272, 0.047808971256017685, 0.04674968868494034, 0.08922374248504639, -0.0013643373968079686, 0.09142893552780151, 0.037473164498806, -0.08028344064950943, 0.023306258022785187, -0.06447078287601471, 0.013525196351110935, 0.021125681698322296, 0.04030051454901695, 0.02655995450913906, 0.030976150184869766, -0.06036258488893509, 0.04621489718556404, 0.03127215430140495, -0.03586013987660408, -0.01891123317182064, -0.04755006358027458, -0.07097462564706802, -0.06354781240224838, -0.05599423125386238, 0.12683001160621643, 0.05768817290663719, 0.06737829744815826, -0.003594558220356703, -0.015806162729859352, 0.0038707773201167583, -0.006870652083307505, -0.027234189212322235, 0.05796949937939644, 0.13121068477630615, 0.027070369571447372, -0.057342853397130966, 0.038428958505392075, -0.08236633986234665, -0.007144697941839695, -0.09193592518568039, 0.0518096461892128, -0.02716585248708725, 0.06713468581438065, 0.07035049796104431, 0.006399556994438171, 0.05492526665329933, 0.021712947636842728, -0.049756038933992386, -0.020029794424772263, -0.008889535441994667, -0.04625333473086357, -0.02029605768620968, -3.0029869289037265e-33, -0.02269560657441616, 0.09759581834077835, -0.015365300700068474, 0.070272296667099, 0.05632585287094116, 0.0008306861273013055, -0.02792041003704071, 0.006989209912717342, -0.1223544031381607, 0.011141094379127026, -0.09095264226198196, 0.05514294654130936, -0.037894636392593384, 0.017505034804344177, 0.08199770748615265, -0.05848873779177666, -0.057870760560035706, 0.024296224117279053, 0.029313798993825912, -0.046027835458517075, -0.06050318107008934, 0.011078555136919022, -0.02457156963646412, 0.02542508766055107, 0.019033018499612808, -0.023587223142385483, -0.08437123894691467, 0.022020479664206505, 0.0296661164611578, 0.0688452199101448, 0.009124440141022205, 0.05377127230167389, 0.011411952786147594, -0.017839720472693443, 0.033323079347610474, -0.012924491427838802, -0.05040980130434036, -0.09216437488794327, 0.0430179089307785, 0.01681516505777836, -0.021254122257232666, 0.07136893272399902, -0.010277197696268559, 0.05098601058125496, 0.023502809926867485, -0.0007532921154052019, -0.013507663272321224, -0.03737457096576691, 0.07103685289621353, 0.028635039925575256, -0.07810430973768234, 0.02414834499359131, -0.05033865571022034, -0.07737930864095688, 0.06294119358062744, -0.04684148728847504, 0.009348512627184391, -0.018652508035302162, 0.00796954520046711, 0.008997931145131588, -0.01780613511800766, 0.11602001637220383, -0.031224936246871948, 0.0637076199054718, -0.03824106976389885, 0.04538474977016449, 0.053774621337652206, 0.02541201375424862, 0.03925389423966408, 0.00785871036350727, 0.005471432115882635, -0.003942531533539295, 0.03675368055701256, -0.029831258580088615, -0.04694501310586929, -0.008480066433548927, -0.022048208862543106, 0.07248709350824356, -0.1106698140501976, 0.02101076953113079, -0.008088728412985802, -0.0241888165473938, 0.03444058448076248, 0.06549537926912308, 0.035855937749147415, 0.02083815447986126, 0.058406829833984375, -0.05932609364390373, -0.015545478090643883, -0.015448320657014847, -0.11485761404037476, -0.026790190488100052, -0.00046057903091423213, 0.12532508373260498, -0.05124177783727646, 2.1946013005531625e-33, 0.015059435740113258, -0.023048439994454384, 0.07172750681638718, -0.014370482414960861, -0.018654610961675644, -0.0762927234172821, 0.03559895232319832, 0.0190065186470747, -0.026058344170451164, 0.11699391156435013, 0.03363821282982826, 0.04128805175423622, -0.02240445278584957, -0.006900215055793524, -0.02046356536448002, 0.0394543781876564, 0.05996941402554512, -0.09573031216859818, -0.020482417196035385, -0.006693406030535698, 0.012797587551176548, -0.05573727563023567, -0.03050757758319378, 0.061862822622060776, -0.0023842533119022846, 0.09879090636968613, -0.03602081164717674, 0.035189561545848846, 0.002298960229381919, -0.010547647252678871, -0.038943346589803696, -0.03213917091488838, 0.0061683510430157185, 0.09778018295764923, -0.0004218225949443877, 0.015060427598655224, -0.006527448073029518, 0.00804260466247797, 0.06337394565343857, -0.06356123834848404, 0.06390202790498734, -0.02356557734310627, -0.029467398300766945, 0.05590462312102318, -0.033709924668073654, -0.050834301859140396, 0.06411882489919662, -0.06744029372930527, 0.008031999692320824, 0.005167418159544468, -0.03446727246046066, 0.008828636258840561, -0.009574397467076778, 0.02026326395571232, -0.032565753906965256, 0.045975059270858765, -0.008591030724346638, 0.03995873034000397, -0.07999314367771149, -0.038932543247938156, 0.06028616800904274, 0.009151674807071686, 0.04018613323569298, 0.08244413882493973, -0.07668926566839218, 0.010439389385282993, 0.034563127905130386, 0.08141953498125076, -0.07679938524961472, 0.04488196223974228, 0.0046537830494344234, 0.01771061308681965, -0.04879726842045784, -0.134109228849411, -0.05904918536543846, 0.0042329225689172745, -0.05341920256614685, -0.04422231391072273, -0.09553702920675278, -0.03322834521532059, 0.0445687472820282, -0.020473606884479523, -0.00869817566126585, 0.10624183714389801, -0.013067982159554958, 0.05536448583006859, 0.07280494272708893, 0.0014302160125225782, -0.028906358405947685, -0.021016046404838562, -0.0088424701243639, -0.060485582798719406, -0.023679060861468315, -0.03987859934568405, -0.02865380421280861, -1.2374275826232406e-08, -0.045816849917173386, 0.0003929813683498651, -0.056615281850099564, -0.039002567529678345, 0.014779957011342049, -0.07410908490419388, 0.0055203731171786785, 0.021557560190558434, 0.06694751977920532, 0.01641230285167694, -0.07842343300580978, -0.009315731935203075, -0.04446807876229286, 0.08088970929384232, -0.018038619309663773, 0.007249278016388416, -0.09804530441761017, 0.0386204831302166, -0.010973541997373104, -0.02245492674410343, -0.006940177641808987, 0.016850298270583153, 0.06513862311840057, -0.039942629635334015, -0.036230240017175674, 0.05477631092071533, 0.010158794932067394, -0.03209267184138298, 0.059000782668590546, 0.053661298006772995, -0.047815632075071335, 0.02397717908024788, -0.0820906013250351, -0.0208769291639328, -0.028116866946220398, -0.09177128225564957, 0.0539262630045414, 0.0032726393546909094, -0.02242656797170639, -0.03158968687057495, 0.007081444840878248, 0.01564093492925167, -0.021868210285902023, 0.025976359844207764, -0.022023407742381096, -0.03907831385731697, 0.003750884672626853, -0.01569954864680767, 0.04913609102368355, -0.05860727280378342, 0.06219980865716934, 0.020738517865538597, -0.03041917085647583, 0.04290768876671791, -0.03356659412384033, -0.05751099810004234, 0.027285940945148468, 0.01466532051563263, -0.056393690407276154, 0.040883567184209824, 0.006173002067953348, -0.06861770153045654, 0.07902631163597107, -0.07084527611732483], 'labels': ['Entity']}]} {}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'stats': {'contains-updates': True, 'labels-added': 1, 'nodes-created': 1, 'properties-set': 10}, 'statuses': [{'gql_status': '00000', 'status_description': 'note: successful completion'}], 'type': 'rw', 't_last': 3, 'db': 'neo4j'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 1, 'fields': ['uuid'], 'qid': 1}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n        UNWIND $episodic_edges AS edge\n        MATCH (episode:Episodic {uuid: edge.source_node_uuid})\n        MATCH (node:Entity {uuid: edge.target_node_uuid})\n        MERGE (episode)-[e:MENTIONS {uuid: edge.uuid}]->(node)\n        SET\n            e.group_id = edge.group_id,\n            e.created_at = edge.created_at\n        RETURN e.uuid AS uuid\n    ' {'episodic_edges': [{'uuid': '44fc1b93-95b5-4f90-bc87-961d5e85b1ec', 'group_id': 'demo_session_20260131_213508', 'source_node_uuid': '03013a24-a05b-4ed8-b57a-28dad9073f35', 'target_node_uuid': '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8', 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 8, 650993, tzinfo=datetime.timezone.utc)}, {'uuid': 'ed03c81c-f8e0-4228-a923-43556a5f12ea', 'group_id': 'demo_session_20260131_213508', 'source_node_uuid': '03013a24-a05b-4ed8-b57a-28dad9073f35', 'target_node_uuid': '10633107-3301-4b90-a8d3-96375555b786', 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 8, 650993, tzinfo=datetime.timezone.utc)}]} {}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'stats': {'contains-updates': True, 'labels-added': 2, 'nodes-created': 2, 'properties-set': 16}, 'statuses': [{'gql_status': '00000', 'status_description': 'note: successful completion'}], 'type': 'rw', 't_last': 4, 'db': 'neo4j'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 2, 'fields': ['uuid'], 'qid': 2}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: RUN '\n                    UNWIND $entity_edges AS edge\n                    MATCH (source:Entity {uuid: edge.source_node_uuid})\n                    MATCH (target:Entity {uuid: edge.target_node_uuid})\n                    MERGE (source)-[e:RELATES_TO {uuid: edge.uuid}]->(target)\n                    SET e = edge\n                    WITH e, edge CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", edge.fact_embedding)\n                RETURN edge.uuid AS uuid\n            ' {'entity_edges': [{'uuid': '08460f7a-5d69-4776-9d0e-41eab8c9c508', 'source_node_uuid': '9fbefe48-8540-4878-ac2a-1f6d0e89c3e8', 'target_node_uuid': '10633107-3301-4b90-a8d3-96375555b786', 'name': 'WORKS_AT', 'fact': 'Alice Chen works at TechCorp as a senior software engineer.', 'group_id': 'demo_session_20260131_213508', 'episodes': ['03013a24-a05b-4ed8-b57a-28dad9073f35'], 'created_at': datetime.datetime(2026, 1, 31, 13, 35, 14, 341779, tzinfo=datetime.timezone.utc), 'expired_at': None, 'valid_at': datetime.datetime(2026, 1, 31, 13, 35, 8, 650972, tzinfo=datetime.timezone.utc), 'invalid_at': None, 'fact_embedding': [-0.013257955200970173, -0.015912862494587898, 0.022474301978945732, -0.011397755704820156, -0.009202243760228157, -0.041002996265888214, 0.05689150467514992, -0.024919820949435234, 0.017458781599998474, -0.02334078960120678, -0.010725305415689945, 0.009378179907798767, 0.053836390376091, 0.0024091368541121483, 0.041189391165971756, 0.07866602391004562, -0.005644650664180517, -0.10255841165781021, 0.07732369005680084, -0.13494768738746643, -0.05164703354239464, -0.05514431744813919, -0.028271842747926712, -0.0495830737054348, 0.08801428228616714, -0.03237532079219818, 0.046238310635089874, -0.03207464516162872, -0.029837124049663544, -0.0036971874069422483, -0.08868484199047089, 0.06445253640413284, 0.06272193044424057, 0.034526482224464417, 0.028945382684469223, 0.1345175951719284, -0.01486134808510542, -0.0004463940276764333, 0.032225314527750015, 0.024852408096194267, -0.06454271823167801, -0.03644619882106781, 0.01648404821753502, -0.0676187053322792, 0.003350391983985901, -0.04298897460103035, 0.043950386345386505, -0.05258382484316826, 0.0026946261059492826, -0.011241059750318527, -0.025353549048304558, -0.04307291656732559, 0.023368552327156067, 0.005199712701141834, 0.049959976226091385, 0.08099187165498734, 0.08079038560390472, -0.01177383866161108, -0.004424453712999821, -0.02248760312795639, -0.013486065901815891, -0.018234647810459137, -0.031746674329042435, 0.0849938690662384, -0.05115899443626404, 0.029212305322289467, -0.04167128726840019, 0.017641175538301468, -0.024288345128297806, -0.09854233264923096, -0.0234883613884449, 0.007306263316422701, -0.09045425057411194, -0.013484431430697441, 0.08569757640361786, -0.05523984879255295, 0.0640760138630867, 0.01311318390071392, 0.07480356097221375, -0.01286950334906578, -0.002904487308114767, 0.018203428015112877, 0.030834611505270004, 0.04351795092225075, -0.08374970406293869, 0.08780159801244736, -0.03554806858301163, 0.01351228915154934, 0.006890776101499796, -0.006056651473045349, -0.043321408331394196, 0.009963898919522762, 0.043308746069669724, 0.03126123547554016, 0.06507500261068344, 0.008979327976703644, 0.04108082130551338, -0.0029665925540030003, -0.04505642503499985, 0.03293948248028755, 0.03913445025682449, 0.016532694920897484, 0.01346464641392231, -0.052764471620321274, -0.02068576216697693, 0.007660320028662682, 0.08685227483510971, 0.053129907697439194, 0.04006268456578255, -0.008289470337331295, 0.0068473657593131065, -0.028988899663090706, -0.06909265369176865, -0.04708145931363106, -0.012188255786895752, 0.024090230464935303, -0.008967208676040173, 0.1281299591064453, -0.04487980157136917, -0.046639975160360336, 0.062066249549388885, -0.017514795064926147, -0.03574998676776886, -0.007048582658171654, 0.06697411090135574, -0.012217625975608826, 0.013761878944933414, -1.0110489359559882e-33, 0.028891941532492638, 0.017711220309138298, 0.01535091083496809, 0.060568250715732574, 0.06549882143735886, 0.019289862364530563, 0.0202875304967165, 0.014157692901790142, -0.04921253025531769, -0.018745798617601395, -0.03959730640053749, 0.0734899640083313, -0.10726065933704376, -0.03825632855296135, 0.010155290365219116, 0.03326907753944397, -0.11207480728626251, 0.08332326263189316, -0.05495954304933548, 0.08304493874311447, 0.09503422677516937, -0.027756815776228905, -0.03672752529382706, 0.04772503674030304, 0.0013772858073934913, 0.04913291707634926, 0.09940346330404282, -0.013567342422902584, 0.08105787634849548, 0.018456893041729927, -0.05404140055179596, 0.0832393541932106, -0.0403514988720417, -0.022416431456804276, -0.05836453288793564, 0.08140704035758972, -0.0771106630563736, 0.0029587196186184883, 0.029982512816786766, 0.045893970876932144, 0.016188299283385277, 0.06226242706179619, 0.11063199490308762, -0.04372628033161163, -0.04917727783322334, -0.018524110317230225, 0.09666956216096878, -0.09131338447332382, 0.10999982059001923, 0.04972578212618828, -0.044775206595659256, -0.019292553886771202, 0.04680546745657921, 0.04289110377430916, 0.07834839075803757, -0.12287382781505585, 0.03954586759209633, 0.027772409841418266, 0.010959158651530743, 0.03573070093989372, -0.07059632986783981, -0.0025238324888050556, -0.03298184275627136, 0.0670282170176506, -0.02868322655558586, 0.02340620383620262, 0.058071523904800415, -0.024166805669665337, 0.07107376307249069, 0.08040976524353027, -0.003882206976413727, -0.006926200818270445, 0.023054271936416626, -0.046903107315301895, -0.11292973905801773, -0.006855137180536985, -0.06983733922243118, -0.03037869930267334, 0.002939032856374979, 0.022304266691207886, -0.015413638204336166, -0.02588549070060253, 0.06358949095010757, 0.02565685100853443, -0.009684687480330467, -0.015718162059783936, -0.030091561377048492, 0.013977618888020515, 0.038848474621772766, 0.0328696072101593, -0.07472623884677887, -0.02583683840930462, -0.023194966837763786, 0.09224781394004822, -0.030403899028897285, -2.705189887734108e-35, -0.07455073297023773, -0.038252197206020355, -0.023138219490647316, 0.012809467501938343, 0.013806551694869995, -0.056318238377571106, 0.0386042445898056, 0.03124651499092579, 0.017258241772651672, 0.007525989785790443, 0.016290264204144478, 0.03940705582499504, -0.10332529246807098, 0.04388686269521713, -0.007754395250231028, -0.02439066767692566, 0.0582587867975235, -0.060740403831005096, -0.06641947478055954, -0.011700223200023174, 0.0006734702037647367, 0.00045597561984322965, -0.06338997930288315, 0.01708640530705452, 0.1199985221028328, 0.07149829715490341, 0.08530404418706894, -0.04217680171132088, -0.025495745241642, 0.020906798541545868, -0.04559079557657242, -0.018681026995182037, -0.07994532585144043, 0.0557277575135231, 0.007867338135838509, -0.04401851072907448, -0.045731984078884125, -0.009711547754704952, -0.008993278257548809, -0.10723228007555008, 0.0902300775051117, -0.07352051138877869, -0.03575049340724945, 0.03132779896259308, 0.04104148969054222, -0.011257542297244072, 0.013920219615101814, -0.032731860876083374, 0.0003591700515244156, -0.03797173872590065, -0.07122282683849335, -0.07210473716259003, 0.07079171389341354, 0.004715309478342533, -0.024251196533441544, -0.018947364762425423, 0.02481425367295742, 0.04497029259800911, 0.0692000463604927, -0.08144833147525787, -0.007840503938496113, 0.017743615433573723, 0.10525724291801453, 0.014499381184577942, -0.10702764242887497, 0.015772363170981407, 0.07101278007030487, -0.006376929115504026, -0.08806062489748001, -0.03499555587768555, 0.09833797067403793, 0.014344322495162487, -0.05085496976971626, -0.05848661810159683, -0.04394885525107384, 0.01709138974547386, -0.0385279580950737, -0.0466882549226284, -0.1008477658033371, -0.028019817546010017, 0.0005975878448225558, -0.03078717738389969, 0.032327014952898026, 0.08636932075023651, -0.0367610789835453, 0.06717456877231598, -0.010541483759880066, -0.023307526484131813, -0.015674574300646782, -0.022076504305005074, -0.06754915416240692, -0.013176998123526573, -0.009013712406158447, -0.03318965062499046, -0.07350445538759232, -1.912632541234416e-08, -0.09411327540874481, 0.026125334203243256, -0.05477745085954666, -0.06962316483259201, -0.05342530831694603, 0.05361509695649147, 0.010720365680754185, 0.009806341491639614, 0.0295454990118742, 0.016098638996481895, 0.000522896065376699, -0.04540421441197395, 0.026533108204603195, 0.0550837405025959, 0.14215995371341705, 0.02374192699790001, 0.030221296474337578, 0.042863860726356506, -0.042724039405584335, -0.08332221210002899, 0.014076410792768002, -0.014681474305689335, 0.06747693568468094, 0.0005874659982509911, -0.08252903074026108, 0.04909428581595421, 0.007984612137079239, 0.050028689205646515, 0.011538504622876644, 0.030580533668398857, -0.06654371321201324, 0.049159761518239975, -0.05192546918988228, 0.02944636158645153, 0.08294067531824112, -0.06863240152597427, 0.06067385524511337, 0.0244646854698658, 0.03127187490463257, 0.03027264028787613, -0.07277819514274597, -0.06304372847080231, 0.04836493730545044, 0.013498152606189251, -0.015036684460937977, -0.08360060304403305, -0.0006338348612189293, -0.0377950556576252, 0.06715524196624756, 0.03157944977283478, 0.05579643324017525, -0.01985928602516651, -0.0454988107085228, -0.023539958521723747, -0.06404399126768112, 0.025923820212483406, 0.017355164512991905, -0.07923995703458786, -0.0841844379901886, 0.009729486890137196, -0.011746631935238838, -0.0555831603705883, 0.06967933475971222, -0.026095012202858925]}]} {}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: PULL {'n': 1000}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'stats': {'contains-updates': True, 'relationships-created': 2, 'properties-set': 6}, 'statuses': [{'gql_status': '00000', 'status_description': 'note: successful completion'}], 'type': 'rw', 't_last': 3, 'db': 'neo4j'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'t_first': 2, 'fields': ['uuid'], 'qid': 3}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: RECORD * 1
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'stats': {'contains-updates': True, 'relationships-created': 1, 'properties-set': 13}, 'statuses': [{'gql_status': '00000', 'status_description': 'note: successful completion'}], 'type': 'rw', 't_last': 3, 'db': 'neo4j'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  C: COMMIT
+21:35:15 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> client state: TX_READY_OR_TX_STREAMING > READY
+21:35:15 | neo4j.io | DEBUG | [#E86E]  S: SUCCESS {'bookmark': 'FB:kcwQLskJJyV+REC9lj1ew4ZBjkiQ'}
+21:35:15 | neo4j.io | DEBUG | [#E86E]  _: <CONNECTION> server state: TX_READY_OR_TX_STREAMING > READY
+21:35:15 | neo4j.pool | DEBUG | [#E86E]  _: <POOL> released bolt-104875
+21:35:15 | graphiti_core.graphiti | INFO | Completed add_episode in 6808.708190917969 ms
+   Span End: zep.graphiti.llm.generate (565.7ms)
+{
+    "name": "zep.graphiti.add_episode",
+    "context": {
+        "trace_id": "0xeba8d3f2bb7f814f0436df22cc28f8fc",
+        "span_id": "0xb58046870046001c",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": null,
+    "start_time": "2026-01-31T13:35:08.651401Z",
+    "end_time": "2026-01-31T13:35:15.461207Z",
+    "status": {
+        "status_code": "UNSET"
+    },
+    "attributes": {
+        "episode.uuid": "03013a24-a05b-4ed8-b57a-28dad9073f35",
+        "episode.source": "message",
+        "episode.reference_time": "2026-01-31T13:35:08.650972+00:00",
+        "group_id": "demo_session_20260131_213508",
+        "node.count": 2,
+        "edge.count": 1,
+        "edge.invalidated_count": 0,
+        "previous_episodes.count": 0,
+        "entity_types.count": 0,
+        "edge_types.count": 0,
+        "update_communities": false,
+        "communities.count": 0,
+        "duration_ms": 6808.708190917969
+    },
+    "events": [],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "service.name": "zep-agent-full-trace",
+            "service.version": "1.0.0"
+        },
+        "schema_url": ""
+    }
+}
+   Span End: zep.graphiti.add_episode (6809.8ms)
+└─ Duration: 6813.0ms
+   Result: Episode 03013a24... created
+
+OK: Turn 1 complete. Duration: 6813.0ms
