@@ -101,8 +101,10 @@ async def extract_edges(
 ) -> list[EntityEdge]:
     start = time()
 
-    extract_edges_max_tokens = 16384
+    # Use the client's max_tokens setting instead of hardcoded value
+    # This respects the vLLM max_model_len configuration
     llm_client = clients.llm_client
+    extract_edges_max_tokens = getattr(llm_client, 'max_tokens', 4096)
 
     edge_type_signature_map: dict[str, tuple[str, str]] = {
         edge_type: signature
