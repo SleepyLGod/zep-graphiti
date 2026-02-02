@@ -20,16 +20,16 @@ sequenceDiagram
 
     App->>Core: add_episode(content, group_id, timestamp) | Aync Task
 
-    Note over Core, Neo4j: Phase 1: Historical Context Query & Raw Episode Creation
+    Note over Core, Neo4j: Phase 1: Historical Context Query & Raw Episode Creation | 👍 topk
     Core->>Neo4j: MATCH (e:Episodic) WHERE e.group_id=$gid<br/>RETURN e ORDER BY e.created_at DESC LIMIT 10
     Neo4j-->>Core: Previous episodes (for context)
     Core->>Neo4j: MERGE (e:Episodic {uuid: $uuid})<br/>SET e.content=$content, e.timestamp=$ts
 
-    Note over Core, LLM: Phase 2: Entity Extraction
+    Note over Core, LLM: Phase 2: Entity Extraction | 👍 sem_map
     Core->>LLM: extract_nodes.extract_message<br/>Prompt: "Extract entities from: Alice works at TechCorp..."<br/>+ previous_episodes + entity_types
     LLM-->>Core: JSON: [{name:"Alice", type:"person"}, {name:"TechCorp", type:"organization"}]
 
-    Note over Core, Neo4j: Phase 3: Entity Deduplication
+    Note over Core, Neo4j: Phase 3: Entity Deduplication | 👍 topk, sem_join, sem_agg
     loop For each extracted entity (Parallel for extracted nodes)
         Core->>Neo4j: Hybrid Search:<br/> BM25 Search: CALL db.index.fulltext.queryNodes('name_index', 'Alice')<br/>+ Cosine Search: vector.similarity.cosine(embedding)
         Neo4j-->>Core: Candidate nodes [{name:"Alice Chen", uuid:xxx}, ...]
@@ -40,11 +40,11 @@ sequenceDiagram
         end
     end
 
-    Note over Core, LLM: Phase 4: Relationship Extraction
+    Note over Core, LLM: Phase 4: Relationship Extraction | 👍 sem_map
     Core->>LLM: extract_edges.edge<br/>Prompt: "Extract relationships between Alice and TechCorp"<br/>+ entity list + previous_episodes
     LLM-->>Core: JSON: [{source:"Alice", target:"TechCorp", relation:"WORKS_AT", fact:"Alice works at TechCorp as a software engineer"}]
 
-    Note over Core, Neo4j: Phase 5: Edge Deduplication
+    Note over Core, Neo4j: Phase 5: Edge Deduplication | 👍 topk, sem_filter/sem_groupby
     loop For each extracted edge (Parallel for extracted edges)
         Core->>Neo4j: BM25 Search: CALL db.index.fulltext.queryRelationships('fact_index', 'works at')<br/>+ Cosine Search on edge embeddings
         Neo4j-->>Core: Candidate edges [{fact:"Alice is employed at TechCorp", uuid:yyy}, ...]
@@ -55,13 +55,13 @@ sequenceDiagram
         end
     end
 
-    Note over Core, LLM: Phase 6: Entity Summary Generation (PARALLEL)
+    Note over Core, LLM: Phase 6: Entity Summary Generation (PARALLEL) | 👍 sem_map
     par Generate summaries concurrently
         Core->>LLM: extract_nodes.extract_summary<br/>Prompt: "Summarize what we know about Alice"<br/>+ all edges involving Alice
         LLM-->>Core: "Alice is a software engineer working at TechCorp"
     and
-        Core->>LLM: extract_nodes.extract_summary<br/>Prompt: "Summarize what we know about TechCorp"<br/>+ all edges involving TechCorp
-        LLM-->>Core: "TechCorp is a technology company where Alice works"
+        Core->>LLM: extract_nodes.extract_summary ... "TechCorp"
+        LLM-->>Core: "TechCorp is ..."
     end
 
     Note over Core, Neo4j: Phase 7: Persist to Neo4j
@@ -69,7 +69,18 @@ sequenceDiagram
     Core->>Neo4j: MATCH (a:Entity {uuid:$src}), (b:Entity {uuid:$tgt})<br/>CREATE (a)-[r:RELATES_TO {fact:$fact, embedding:$vec}]->(b)
     Neo4j-->>Core: Committed
 
-    Core-->>App: EpisodeResult (nodes, edges created)
+    Note over Core, Neo4j: Phase 8: Community Update (OPTIONAL, PARALLEL) | update_communities=False by default | 👍 sem_agg
+    opt update_communities=True
+        par For each entity node
+            Core->>Neo4j: determine_entity_community<br/>MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $uuid})
+            Neo4j-->>Core: Existing community (or none)
+            Core->>LLM: summarize_pair + generate_summary_description
+            LLM-->>Core: Merged summary + new name
+            Core->>Neo4j: community.save() + community_edge.save()
+        end
+    end
+
+    Core-->>App: EpisodeResult (nodes, edges, communities)
 ```
 
 ### Time Breakdown (from trace logs)
@@ -133,7 +144,7 @@ sequenceDiagram
             Neo4j-->>Core: Edges within N hops of center node
         end
 
-        Note over Core, Reranker: Cross-Encoder Reranking
+        Note over Core, Reranker: Cross-Encoder Reranking | 👍 sem_topk
         Core->>Reranker: cross_encoder.rank(query, facts)<br/>Options: OpenAIReranker (LLM logprobs) / BGEReranker (local model)
         Reranker-->>Core: Reranked edge list with scores
     end
