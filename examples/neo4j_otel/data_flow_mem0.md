@@ -35,7 +35,7 @@ sequenceDiagram
         Server->>GraphDB: Search Nodes (Vector Sim) + Traverse 1-hop | 👍 topk
         GraphDB-->>Server: Existing Subgraphs
         
-        Server->>LLM: Delete Decision Prompt (Existing + Input)
+        Server->>LLM: Judge Outdated/Inaccurate/Contradictory => <br/> Delete Decision Prompt (Existing + Input) | 👍 sem_filter
         LLM-->>Server: Delete Ops
         Server->>GraphDB: Execute DELETE
         

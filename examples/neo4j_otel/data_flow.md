@@ -20,7 +20,7 @@ sequenceDiagram
 
     App->>Core: add_episode(content, group_id, timestamp) | Aync Task
 
-    Note over Core, Neo4j: Phase 1: Historical Context Query & Raw Episode Creation | 👍 topk
+    Note over Core, Neo4j: Phase 1: Historical Context Query & Raw Episode Creation | 👍 relational topk
     Core->>Neo4j: MATCH (e:Episodic) WHERE e.group_id=$gid<br/>RETURN e ORDER BY e.created_at DESC LIMIT 10
     Neo4j-->>Core: Previous episodes (for context)
     Core->>Neo4j: MERGE (e:Episodic {uuid: $uuid})<br/>SET e.content=$content, e.timestamp=$ts
@@ -29,7 +29,7 @@ sequenceDiagram
     Core->>LLM: extract_nodes.extract_message<br/>Prompt: "Extract entities from: Alice works at TechCorp..."<br/>+ previous_episodes + entity_types
     LLM-->>Core: JSON: [{name:"Alice", type:"person"}, {name:"TechCorp", type:"organization"}]
 
-    Note over Core, Neo4j: Phase 3: Entity Deduplication | 👍 topk, sem_join, sem_agg
+    Note over Core, Neo4j: Phase 3: Entity Deduplication | 👍 relational topk (sem_topk), sem_filter
     loop For each extracted entity (Parallel for extracted nodes)
         Core->>Neo4j: Hybrid Search:<br/> BM25 Search: CALL db.index.fulltext.queryNodes('name_index', 'Alice')<br/>+ Cosine Search: vector.similarity.cosine(embedding)
         Neo4j-->>Core: Candidate nodes [{name:"Alice Chen", uuid:xxx}, ...]
@@ -44,7 +44,7 @@ sequenceDiagram
     Core->>LLM: extract_edges.edge<br/>Prompt: "Extract relationships between Alice and TechCorp"<br/>+ entity list + previous_episodes
     LLM-->>Core: JSON: [{source:"Alice", target:"TechCorp", relation:"WORKS_AT", fact:"Alice works at TechCorp as a software engineer"}]
 
-    Note over Core, Neo4j: Phase 5: Edge Deduplication | 👍 topk, sem_filter/sem_groupby
+    Note over Core, Neo4j: Phase 5: Edge Deduplication | 👍 relational topk, sem_filter
     loop For each extracted edge (Parallel for extracted edges)
         Core->>Neo4j: BM25 Search: CALL db.index.fulltext.queryRelationships('fact_index', 'works at')<br/>+ Cosine Search on edge embeddings
         Neo4j-->>Core: Candidate edges [{fact:"Alice is employed at TechCorp", uuid:yyy}, ...]
@@ -55,7 +55,7 @@ sequenceDiagram
         end
     end
 
-    Note over Core, LLM: Phase 6: Entity Summary Generation (PARALLEL) | 👍 sem_map
+    Note over Core, LLM: Phase 6: Entity Summary Generation (PARALLEL) | 👍 sem_agg
     par Generate summaries concurrently
         Core->>LLM: extract_nodes.extract_summary<br/>Prompt: "Summarize what we know about Alice"<br/>+ all edges involving Alice
         LLM-->>Core: "Alice is a software engineer working at TechCorp"
@@ -117,7 +117,7 @@ sequenceDiagram
     Core->>Core: embedder.embed("What does Alice do?")
     Note right of Core: Local Model/API
 
-    Note over Core, Neo4j: Phase 2: Parallel Retrieval Methods
+    Note over Core, Neo4j: Phase 2: Parallel Retrieval Methods | 👍 relational topk (sem_topk)
 
     alt Config: EDGE_HYBRID_SEARCH_RRF (Default - No BFS)
         par Method 1: BM25 Full-text Search
