@@ -19,6 +19,29 @@ This table shows all LLM calls made for each conversational turn (episode).
 | 4 | Edge Deduplication | Check for duplicate facts | `{duplicate_facts: [], contradicted_facts: []}` (new fact) |
 | 5 | Entity Summary Generation (×2, parallel) | Generate entity summaries | Alice: "Alice Chen works at TechCorp..."<br>TechCorp: "TechCorp employs Alice Chen..." |
 
+**Graph State After Turn 1:**
+```
+┌──────────────────────────────┐
+│ Episodic: ef48db72           │
+│   content: "Alice Chen..."   │
+│   entity_edges: [fc5b1af8]   │
+└───────┬──────────────┬───────┘
+        │ MENTIONS     │ MENTIONS
+        ▼              ▼
+┌───────────────┐    ┌───────────────┐
+│ Entity:       │    │ Entity:       │
+│ Alice Chen    │    │ TechCorp      │
+│ 198d581d      │    │ a1b2c3d4      │
+└───────┬───────┘    └───────▲───────┘
+        │                    │
+        └────RELATES_TO──────┘
+              WORKS_AT
+              fc5b1af8
+
+Nodes: [Episodic:ef48db72, Entity:198d581d (Alice), Entity:a1b2c3d4 (TechCorp)]
+Edges: [MENTIONS×2, RELATES_TO×1]
+```
+
 #### Turn 2: Project Information
 **Input Message:** `"Alice Chen(user): I'm currently leading Project Phoenix, a major cloud migration initiative."`
 
@@ -30,6 +53,33 @@ This table shows all LLM calls made for each conversational turn (episode).
 | 9 | Edge Deduplication | Check facts | `{duplicate_facts: [], contradicted_facts: []}` |
 | 10 | Entity Summary Generation (×2) | Update summaries | Alice: Updated with "leading Project Phoenix"<br>Project Phoenix: New summary |
 
+**Graph State After Turn 2:**
+
+New entities: Project Phoenix (597ad016)
+Reused entities: Alice Chen (198d581d) - summary updated
+New edges: LEADING_PROJECT (291f347f)
+
+```
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ Episodic: ef48db72           │  │ Episodic: b31f0028           │
+│ (Episode 1)                  │  │ (Episode 2)                  │
+└───────┬──────────────┬───────┘  └───────┬──────────────────────┘
+        │              │                  │
+        │ MENTIONS     │ MENTIONS         │ MENTIONS
+        ▼              ▼                  ▼
+┌───────────────┐    ┌───────────────┐  ┌───────────────────────┐
+│ Entity:       │    │ Entity:       │  │ Entity:               │
+│ Alice Chen    │◄───│ TechCorp      │  │ Project Phoenix       │
+│ 198d581d      │    │ a1b2c3d4      │  │ 597ad016              │
+└───────┬───────┘    └───────────────┘  └───────────▲───────────┘
+        │                                           │
+        └────────RELATES_TO: LEADING_PROJECT────────┘
+                     291f347f
+
+Nodes: [Episodic×2, Entity×3]
+Edges: [MENTIONS×4, RELATES_TO×2 (WORKS_AT, LEADING_PROJECT)]
+```
+
 #### Turn 3: Deadline Information
 **Input Message:** `"Alice Chen(user): The project deadline is February 15th, and we have 3 team members."`
 
@@ -40,6 +90,38 @@ This table shows all LLM calls made for each conversational turn (episode).
 | 13 | Edge Extraction | Extract relationships | `[{fact: "Alice Chen leads Project Phoenix..."}, {fact: "deadline is February 15th..."}]` |
 | 14 | Edge Deduplication | Check facts | `{duplicate_facts: [0], contradicted_facts: [0]}` ("leads" duplicates existing) |
 | 15 | Entity Summary Generation (×2) | Update summaries | Alice: Updated with "deadline February 15th, 3 team members" |
+
+**Graph State After Turn 3 (Final):**
+
+Reused entities: Alice Chen, Project Phoenix - summaries updated
+New edges: PROJECT_DEADLINE (70e5c2b0)
+Duplicate detected: "leads Project Phoenix" → appends episode UUID to existing edge
+
+```
+                      ┌──────────────────────────────┐
+                      │ Episodic: b6cb0fbd           │
+                      │ (Episode 3)                  │
+                      └───────┬──────────────┬───────┘
+                              │ MENTIONS     │ MENTIONS
+                              ▼              ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────────────┐
+│ TechCorp      │◄───│ Alice Chen    │───►│ Project Phoenix       │
+│ a1b2c3d4      │    │ 198d581d      │    │ 597ad016              │
+└───────────────┘    └───────────────┘    └───────────────────────┘
+       ▲                    │                      │
+       │                    │                      │
+  WORKS_AT            LEADING_PROJECT        PROJECT_DEADLINE
+  fc5b1af8            291f347f               70e5c2b0
+  episodes:[ep1]      episodes:[ep2,ep3]     episodes:[ep3]
+                      (ep3 appended due
+                       to duplicate)
+
+Final Counts:
+- Episodic Nodes: 3
+- Entity Nodes: 3 (Alice Chen, TechCorp, Project Phoenix)
+- MENTIONS Edges: 6 (each episode connects to 2 entities)
+- RELATES_TO Edges: 3 (WORKS_AT, LEADING_PROJECT, PROJECT_DEADLINE)
+```
 
 **Key Observations from Logs:**
 - **17 total LLM calls** across 3 episodes
@@ -64,26 +146,30 @@ sequenceDiagram
 
     Note over App, Neo4j: === ADD EPISODE: "Alice works at TechCorp as a software engineer" ===
 
-    App->>Core: add_episode(content, group_id, timestamp) | Aync Task
+    App->>Core: add_episode(content, group_id, timestamp) | Async Task
 
-    Note over Core, Neo4j: Phase 1: Historical Context Query & Raw Episode Creation | 👍 relational topk
+    Note over Core, Neo4j: Phase 1: Historical Context Query & Episode Creation (in-memory) | 👍 relational topk
     Core->>Neo4j: MATCH (e:Episodic) WHERE e.group_id=$gid<br/>RETURN e ORDER BY e.created_at DESC LIMIT 10
     Neo4j-->>Core: Previous episodes (for context)
-    Core->>Neo4j: MERGE (e:Episodic {uuid: $uuid})<br/>SET e.content=$content, e.timestamp=$ts
+    Note right of Core: Create EpisodicNode object in memory<br/>(NOT written to DB yet)
 
     Note over Core, LLM: Phase 2: Entity Extraction | 👍 sem_map
     Core->>LLM: extract_nodes.extract_message<br/>Prompt: "Extract entities from: Alice works at TechCorp..."<br/>+ previous_episodes + entity_types
     LLM-->>Core: JSON: [{name:"Alice", type:"person"}, {name:"TechCorp", type:"organization"}]
 
     Note over Core, Neo4j: Phase 3: Entity Deduplication | 👍 relational topk (sem_topk), sem_filter
-    loop For each extracted entity (Parallel for extracted nodes)
-        Core->>Neo4j: Hybrid Search:<br/> BM25 Search: CALL db.index.fulltext.queryNodes('name_index', 'Alice')<br/>+ Cosine Search: vector.similarity.cosine(embedding)
-        Neo4j-->>Core: Candidate nodes [{name:"Alice Chen", uuid:xxx}, ...]
-        
-        alt Candidates found
-            Core->>LLM: dedupe_nodes.nodes<br/>Prompt: "Is 'Alice' the same as 'Alice Chen'?"<br/>+ node summaries
-            LLM-->>Core: JSON: {is_duplicate: true, uuid: "xxx"} or {is_duplicate: false}
-        end
+    par Parallel search for each extracted entity
+        Core->>Neo4j: Hybrid Search (entity 1: "Alice"):<br/>BM25: queryNodes('name_index', 'Alice')<br/>+ Cosine: vector.similarity.cosine(name_embedding)
+        Neo4j-->>Core: Candidate nodes for "Alice"
+    and
+        Core->>Neo4j: Hybrid Search (entity 2: "TechCorp"):<br/>BM25 + Cosine
+        Neo4j-->>Core: Candidate nodes for "TechCorp"
+    end
+
+    alt Any unresolved entities with candidates
+        Core->>LLM: dedupe_nodes.nodes (SINGLE LLM CALL for ALL entities)<br/>Prompt: "Are these extracted entities duplicates of existing ones?"<br/>+ all extracted entities + all candidate lists
+        LLM-->>Core: JSON: {entity_resolutions: [{id:0, duplicate_idx:-1}, {id:1, duplicate_idx:-1}]}
+        Note right of Core: duplicate_idx=-1 means new entity<br/>duplicate_idx>=0 points to existing entity index
     end
 
     Note over Core, LLM: Phase 4: Relationship Extraction | 👍 sem_map
@@ -91,14 +177,16 @@ sequenceDiagram
     LLM-->>Core: JSON: [{source:"Alice", target:"TechCorp", relation:"WORKS_AT", fact:"Alice works at TechCorp as a software engineer"}]
 
     Note over Core, Neo4j: Phase 5: Edge Deduplication | 👍 relational topk, sem_filter
-    loop For each extracted edge (Parallel for extracted edges)
-        Core->>Neo4j: BM25 Search: CALL db.index.fulltext.queryRelationships('fact_index', 'works at')<br/>+ Cosine Search on edge embeddings
-        Neo4j-->>Core: Candidate edges [{fact:"Alice is employed at TechCorp", uuid:yyy}, ...]
-        
-        alt Candidates found
-            Core->>LLM: dedupe_edges.resolve_edge<br/>Prompt: "Is NEW FACT duplicate of EXISTING FACTS?<br/>Does NEW FACT contradict INVALIDATION CANDIDATES?"
-            LLM-->>Core: JSON: {duplicate_facts: [idx], contradicted_facts: [idx], fact_type: "..."}
-        end
+    Note right of Core: First: generate embeddings for all extracted edges<br/>(required BEFORE search)
+    par Parallel search for each extracted edge
+        Core->>Neo4j: Hybrid Search (edge 1: "WORKS_AT"):<br/>BM25: queryRelationships('fact_index', 'works at')<br/>+ Cosine: vector.similarity.cosine(fact_embedding)
+        Neo4j-->>Core: Candidate edges for edge 1
+    end
+
+    Note right of Core: LLM dedup calls are parallel (one per edge with candidates)
+    alt Candidates found for edge 1
+        Core->>LLM: dedupe_edges.resolve_edge (PER-EDGE LLM CALL)<br/>Prompt: "Is NEW FACT duplicate/contradiction of EXISTING FACTS?"
+        LLM-->>Core: JSON: {duplicate_facts: [], contradicted_facts: [], fact_type: "..."}
     end
 
     Note over Core, LLM: Phase 6: Entity Summary Generation (PARALLEL) | 👍 sem_agg
@@ -110,19 +198,37 @@ sequenceDiagram
         LLM-->>Core: "TechCorp is ..."
     end
 
-    Note over Core, Neo4j: Phase 7: Persist to Neo4j
-    Core->>Neo4j: MERGE (n:Entity {uuid: $uuid})<br/>SET n.name=$name, n.summary=$summary, n.embedding=$vec
-    Core->>Neo4j: MATCH (a:Entity {uuid:$src}), (b:Entity {uuid:$tgt})<br/>CREATE (a)-[r:RELATES_TO {fact:$fact, embedding:$vec}]->(b)
+    Note over Core, Neo4j: Phase 7: Persist to Neo4j (Bulk Save in Order)
+    rect rgb(240, 248, 255)
+        Note right of Core: 7a. Save Episode Node
+        Core->>Neo4j: MERGE (n:Episodic {uuid: $uuid})<br/>SET n = {content, entity_edges, ...}
+        Note right of Core: 7b. Save Entity Nodes
+        Core->>Neo4j: MERGE (n:Entity {uuid: $uuid})<br/>SET n = {name, summary, ...}<br/>+ setNodeVectorProperty(name_embedding)
+        Note right of Core: 7c. Save EpisodicEdges (MENTIONS)
+        Core->>Neo4j: MATCH (episode:Episodic), (entity:Entity)<br/>MERGE (episode)-[:MENTIONS]->(entity)
+        Note right of Core: 7d. Save EntityEdges (RELATES_TO)
+        Core->>Neo4j: MATCH (src:Entity), (tgt:Entity)<br/>MERGE (src)-[e:RELATES_TO]->(tgt)<br/>SET e = {fact, episodes, ...}<br/>+ setRelationshipVectorProperty(fact_embedding)
+    end
     Neo4j-->>Core: Committed
 
     Note over Core, Neo4j: Phase 8: Community Update (OPTIONAL, PARALLEL) | update_communities=False by default | 👍 sem_agg
+    Note right of Core: Runs AFTER Phase 7 bulk save completes<br/>Writes IMMEDIATELY (not bulk save)
     opt update_communities=True
-        par For each entity node
-            Core->>Neo4j: determine_entity_community<br/>MATCH (c:Community)-[:HAS_MEMBER]->(m:Entity)-[:RELATES_TO]-(n:Entity {uuid: $uuid})
-            Neo4j-->>Core: Existing community (or none)
-            Core->>LLM: summarize_pair + generate_summary_description
-            LLM-->>Core: Merged summary + new name
-            Core->>Neo4j: community.save() + community_edge.save()
+        par For each entity node (parallel via semaphore_gather)
+            Core->>Neo4j: determine_entity_community<br/>1. Check if entity already has community<br/>2. Find neighboring entities' communities
+            Neo4j-->>Core: (community, is_new) tuple
+
+            alt community found
+                Core->>LLM: summarize_pair(entity.summary, community.summary)
+                LLM-->>Core: Merged summary
+                Core->>LLM: generate_summary_description(merged_summary)
+                LLM-->>Core: New community name
+
+                alt is_new = True (entity not yet in community)
+                    Core->>Neo4j: community_edge.save()<br/>CREATE (Community)-[:HAS_MEMBER]->(Entity)
+                end
+                Core->>Neo4j: community.save()<br/>MERGE (c:Community {uuid})<br/>SET c.summary, c.name, c.name_embedding
+            end
         end
     end
 
@@ -150,7 +256,15 @@ sequenceDiagram
 "Hi, I'm Alice Chen. I work at TechCorp as a senior software engineer."
 ```
 
-#### Step 1: Episode Creation
+#### Step 1: Query Previous Episodes & Create Episode (in-memory)
+
+> **⚠️ Important:** Episode is NOT written to DB at this step. Only queried and created in memory.
+
+**Database Query (retrieve previous episodes for context):**
+```cypher
+MATCH (e:Episodic) WHERE e.group_id = $gid
+RETURN e ORDER BY e.created_at DESC LIMIT 10
+```
 
 **Input:**
 ```python
@@ -162,7 +276,7 @@ sequenceDiagram
 }
 ```
 
-**Output (EpisodicNode):**
+**Output (EpisodicNode - IN MEMORY, not yet in DB):**
 ```python
 {
     "uuid": "ef48db72-c855-4e04-b5d2-654f01a240c6",
@@ -175,14 +289,11 @@ sequenceDiagram
 }
 ```
 
-**Database Operation:**
-```cypher
-MERGE (n:Episodic {uuid: $uuid})
-SET n = {uuid: $uuid, name: $name, group_id: $group_id,
-         source_description: $source_description, source: $source,
-         content: $content, entity_edges: $entity_edges,
-         created_at: $created_at, valid_at: $valid_at}
-RETURN n.uuid AS uuid
+**Graph State After Step 1:**
+```
+Graph: (empty or existing state from previous episodes)
+New in-memory object: EpisodicNode(uuid="ef48db72-...")
+DB writes: NONE
 ```
 
 ---
@@ -465,7 +576,7 @@ episode.entity_edges = [edge.uuid for edge in entity_edges]  # List of EntityEdg
 
 ---
 
-#### Step 8: Persist to Neo4j
+#### Step 8: Persist to Neo4j (Bulk Save)
 
 > **⚠️ Important Notes:**
 > 1. **All modifications are IN-MEMORY operations** until this step. This includes:
@@ -475,7 +586,22 @@ episode.entity_edges = [edge.uuid for edge in entity_edges]  # List of EntityEdg
 > 2. **Embedding generation check:** If `name_embedding` or `fact_embedding` is `None`, it's generated here via `node.generate_name_embedding(embedder)` or `edge.generate_embedding(embedder)`
 > 3. **MERGE + SET pattern** overwrites all fields, ensuring all in-memory changes are persisted
 
-**Entity Node Save Query:**
+**Write Order (from `bulk_utils.py:239-250`):**
+
+| Step | Operation | Cypher |
+|------|-----------|--------|
+| **8a** | Save Episode Node | `MERGE (n:Episodic {uuid}) SET n = {..., entity_edges: [...]}` |
+| **8b** | Save Entity Nodes | `MERGE (n:Entity {uuid}) SET n = {...}` + `setNodeVectorProperty(name_embedding)` |
+| **8c** | Save EpisodicEdges | `MATCH (episode:Episodic), (entity:Entity) MERGE (episode)-[:MENTIONS]->(entity)` |
+| **8d** | Save EntityEdges | `MATCH (src:Entity), (tgt:Entity) MERGE (src)-[e:RELATES_TO]->(tgt) SET e = {...}` + `setRelationshipVectorProperty(fact_embedding)` |
+
+**8a. Episode Node Save Query:**
+```cypher
+MERGE (n:Episodic {uuid: "ef48db72-..."})
+SET n = {content: "...", entity_edges: ["fc5b1af8-..."], ...}
+```
+
+**8b. Entity Node Save Query:**
 ```cypher
 MERGE (n:Entity {uuid: $entity_data.uuid})
 SET n:Entity
@@ -484,19 +610,14 @@ WITH n CALL db.create.setNodeVectorProperty(n, "name_embedding", $entity_data.na
 RETURN n.uuid AS uuid
 ```
 
-**Entity Data Example:**
-```python
-{
-    "uuid": "198d581d-6694-4a52-b233-eb082f57e896",
-    "name": "Alice Chen",
-    "group_id": "demo_session_20260203_204107",
-    "summary": "Alice Chen works at TechCorp as a senior software engineer.",
-    "labels": ["Entity"],
-    "name_embedding": [-0.026355..., 0.013259..., ...]  # 384-dim vector
-}
+**8c. EpisodicEdge Save Query (MENTIONS):**
+```cypher
+MATCH (episode:Episodic {uuid: "ef48db72-..."})
+MATCH (node:Entity {uuid: "198d581d-..."})  -- Alice Chen
+MERGE (episode)-[e:MENTIONS]->(node)
 ```
 
-**Edge Save Query:**
+**8d. EntityEdge Save Query (RELATES_TO):**
 ```cypher
 MATCH (source:Entity {uuid: $edge_data.source_uuid})
 MATCH (target:Entity {uuid: $edge_data.target_uuid})
@@ -506,250 +627,9 @@ WITH e CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", $edge_d
 RETURN e.uuid AS uuid
 ```
 
-**Edge Data Example:**
-```python
-{
-    "uuid": "fc5b1af8-1733-46fe-b03f-27e809c2ef55",
-    "source_uuid": "198d581d-6694-4a52-b233-eb082f57e896",  # Alice Chen
-    "target_uuid": "a1b2c3d4-...",  # TechCorp
-    "group_id": "demo_session_20260203_204107",
-    "name": "WORKS_AT",
-    "fact": "Alice Chen works at TechCorp as a senior software engineer.",
-    "fact_embedding": [0.0123..., -0.0456..., ...],  # 384-dim vector
-    "episodes": ["ef48db72-c855-4e04-b5d2-654f01a240c6"],
-    "valid_at": "2026-02-03T12:41:07.285892Z",
-    "invalid_at": null,
-    "expired_at": null
-}
-```
+**Graph State After Step 8:** See "Graph State After Turn 1" in Section 1.1.
 
-### 1.5 Graph State Evolution: Step-by-Step
-
-This section shows the **exact graph state after each operation** in Episode 1:
-
----
-
-#### Episode 1: Initial State (Before Any Operations)
-
-```
-Graph: (empty)
-Nodes: 0
-Edges: 0
-```
-
----
-
-#### Episode 1, Step 1: Create Episode Node
-
-**Operation:** `MERGE (n:Episodic {uuid: $uuid}) SET n = {...}`
-
-**Graph State After:**
-```
-┌──────────────────────────────────────┐
-│ Episodic: ef48db72...                │
-│   content: "Alice Chen(user): Hi..." │
-│   entity_edges: []                   │
-└──────────────────────────────────────┘
-
-Nodes: [Episodic:ef48db72]
-Edges: []
-```
-
----
-
-#### Episode 1, Step 2-3: Entity Extraction + Deduplication (LLM Only)
-
-**Operation:** In-memory only, no database changes
-
-**In-Memory State:**
-```python
-extracted_nodes = [
-    EntityNode(name="Alice Chen", uuid="198d581d-..."),
-    EntityNode(name="TechCorp", uuid="a1b2c3d4-...")
-]
-# uuid_map: {new_uuid: new_uuid} (no duplicates found)
-```
-
-**Graph State After:** Same as Step 1 (no DB operations yet)
-
----
-
-#### Episode 1, Step 4-5: Edge Extraction + Deduplication (LLM Only)
-
-**Operation:** In-memory only
-
-**In-Memory State:**
-```python
-extracted_edges = [
-    EntityEdge(
-        name="WORKS_AT",
-        source_node_uuid="198d581d-...",  # Alice Chen
-        target_node_uuid="a1b2c3d4-...",  # TechCorp
-        fact="Alice Chen works at TechCorp as a senior software engineer.",
-        episodes=["ef48db72-..."]  # Current episode UUID
-    )
-]
-```
-
-**Graph State After:** Same as Step 1
-
----
-
-#### Episode 1, Step 6: Summary Generation (LLM)
-
-**Operation:** LLM generates summaries, updates in-memory EntityNode objects
-
-**In-Memory State:**
-```python
-extracted_nodes[0].summary = "Alice Chen works at TechCorp as a senior software engineer."
-extracted_nodes[1].summary = "TechCorp employs Alice Chen as a senior software engineer."
-```
-
----
-
-#### Episode 1, Step 7: Build EpisodicEdges (In-Memory)
-
-**Operation:** `build_episodic_edges(nodes, episode_uuid, now)`
-
-**In-Memory State:**
-```python
-episodic_edges = [
-    EpisodicEdge(source_node_uuid="ef48db72-...", target_node_uuid="198d581d-..."),  # Episode → Alice
-    EpisodicEdge(source_node_uuid="ef48db72-...", target_node_uuid="a1b2c3d4-...")   # Episode → TechCorp
-]
-episode.entity_edges = ["fc5b1af8-..."]  # EntityEdge UUID (WORKS_AT)
-```
-
----
-
-#### Episode 1, Step 8: Persist All to Neo4j (Bulk Save)
-
-**Operations (in order):**
-
-**8a. Save Episode Node:**
-```cypher
-MERGE (n:Episodic {uuid: "ef48db72-..."})
-SET n = {content: "...", entity_edges: ["fc5b1af8-..."], ...}
-```
-
-**8b. Save Entity Nodes:**
-```cypher
-MERGE (n:Entity {uuid: "198d581d-..."}) SET n = {name: "Alice Chen", summary: "...", ...}
-CALL db.create.setNodeVectorProperty(n, "name_embedding", [...])
-
-MERGE (n:Entity {uuid: "a1b2c3d4-..."}) SET n = {name: "TechCorp", summary: "...", ...}
-CALL db.create.setNodeVectorProperty(n, "name_embedding", [...])
-```
-
-**8c. Save EpisodicEdges (MENTIONS):**
-```cypher
-MATCH (episode:Episodic {uuid: "ef48db72-..."})
-MATCH (node:Entity {uuid: "198d581d-..."})  -- Alice Chen
-MERGE (episode)-[e:MENTIONS]->(node)
-
-MATCH (episode:Episodic {uuid: "ef48db72-..."})
-MATCH (node:Entity {uuid: "a1b2c3d4-..."})  -- TechCorp
-MERGE (episode)-[e:MENTIONS]->(node)
-```
-
-**8d. Save EntityEdges (RELATES_TO):**
-```cypher
-MATCH (source:Entity {uuid: "198d581d-..."})  -- Alice Chen
-MATCH (target:Entity {uuid: "a1b2c3d4-..."})  -- TechCorp
-MERGE (source)-[e:RELATES_TO {uuid: "fc5b1af8-..."}]->(target)
-SET e = {name: "WORKS_AT", fact: "...", episodes: ["ef48db72-..."], ...}
-CALL db.create.setRelationshipVectorProperty(e, "fact_embedding", [...])
-```
-
-**Graph State After Episode 1:**
-```
-┌──────────────────────────────┐
-│ Episodic: ef48db72           │
-│   content: "Alice Chen..."   │
-│   entity_edges: [fc5b1af8]   │
-└───────┬──────────────┬───────┘
-        │ MENTIONS     │ MENTIONS
-        ▼              ▼
-┌───────────────┐    ┌───────────────┐
-│ Entity:       │    │ Entity:       │
-│ Alice Chen    │    │ TechCorp      │
-│ 198d581d      │    │ a1b2c3d4      │
-└───────┬───────┘    └───────▲───────┘
-        │                    │
-        └────RELATES_TO──────┘
-              WORKS_AT
-              fc5b1af8
-
-Nodes: [Episodic:ef48db72, Entity:198d581d (Alice), Entity:a1b2c3d4 (TechCorp)]
-Edges: [MENTIONS×2, RELATES_TO×1]
-```
-
----
-
-#### Graph State After Episode 2
-
-**New entities:** Project Phoenix (597ad016)
-**Reused entities:** Alice Chen (198d581d) - summary updated
-**New edges:** LEADING_PROJECT (291f347f)
-
-```
-┌──────────────────────────────┐  ┌──────────────────────────────┐
-│ Episodic: ef48db72           │  │ Episodic: b31f0028           │
-│ (Episode 1)                  │  │ (Episode 2)                  │
-└───────┬──────────────┬───────┘  └───────┬──────────────────────┘
-        │              │                  │              
-        │ MENTIONS     │ MENTIONS         │ MENTIONS     
-        ▼              ▼                  ▼              
-┌───────────────┐    ┌───────────────┐  ┌───────────────────────┐
-│ Entity:       │    │ Entity:       │  │ Entity:               │
-│ Alice Chen    │◄───│ TechCorp      │  │ Project Phoenix       │
-│ 198d581d      │    │ a1b2c3d4      │  │ 597ad016              │
-└───────┬───────┘    └───────────────┘  └───────────▲───────────┘
-        │                                           │
-        └────────RELATES_TO: LEADING_PROJECT────────┘
-                     291f347f
-
-Nodes: [Episodic×2, Entity×3]
-Edges: [MENTIONS×4, RELATES_TO×2 (WORKS_AT, LEADING_PROJECT)]
-```
-
----
-
-#### Graph State After Episode 3 (Final)
-
-**Reused entities:** Alice Chen, Project Phoenix - summaries updated
-**New edges:** PROJECT_DEADLINE (70e5c2b0)
-**Duplicate detected:** "leads Project Phoenix" → appends episode UUID to existing edge
-
-```
-                      ┌──────────────────────────────┐
-                      │ Episodic: b6cb0fbd           │
-                      │ (Episode 3)                  │
-                      └───────┬──────────────┬───────┘
-                              │ MENTIONS     │ MENTIONS
-                              ▼              ▼
-┌───────────────┐    ┌───────────────┐    ┌───────────────────────┐
-│ TechCorp      │◄───│ Alice Chen    │───►│ Project Phoenix       │
-│ a1b2c3d4      │    │ 198d581d      │    │ 597ad016              │
-└───────────────┘    └───────────────┘    └───────────────────────┘
-       ▲                    │                      │
-       │                    │                      │
-  WORKS_AT            LEADING_PROJECT        PROJECT_DEADLINE
-  fc5b1af8            291f347f               70e5c2b0
-  episodes:[ep1]      episodes:[ep2,ep3]     episodes:[ep3]
-                      (ep3 appended due
-                       to duplicate)
-
-Final Counts:
-- Episodic Nodes: 3
-- Entity Nodes: 3 (Alice Chen, TechCorp, Project Phoenix)
-- MENTIONS Edges: 6 (each episode connects to 2 entities)
-- RELATES_TO Edges: 3 (WORKS_AT, LEADING_PROJECT, PROJECT_DEADLINE)
-```
-
----
-
-### 1.6 Data Model and Handling Logic
+### 1.5 Data Model and Handling Logic
 
 This section combines data structure definitions with their handling logic (duplicate, update, invalidation).
 
@@ -882,34 +762,41 @@ sequenceDiagram
     Note right of Core: Local Model/API
 
     Note over Core, Neo4j: Phase 2: Parallel Retrieval Methods | 👍 relational topk (sem_topk)
+    Note right of Core: Edge, Node, Episode, Community searches run in parallel via semaphore_gather
 
     alt Config: EDGE_HYBRID_SEARCH_RRF (Default - No BFS)
-        par Method 1: BM25 Full-text Search
-            Core->>Neo4j: CALL db.index.fulltext.queryRelationships('edge_fact_fulltext', 'Alice do work')<br/>YIELD relationship, score<br/>RETURN relationship LIMIT 10
+        par BM25 + Cosine (parallel)
+            Core->>Neo4j: BM25: queryRelationships('edge_fact_fulltext', $query)
             Neo4j-->>Core: Edges by text relevance
-        and Method 2: Cosine Similarity Search
-            Core->>Neo4j: MATCH (a)-[r:RELATES_TO]->(b) WHERE r.group_id IN $group_ids<br/>WITH r, vector.similarity.cosine(r.embedding, $query_vec) AS score<br/>ORDER BY score DESC LIMIT 10
+        and
+            Core->>Neo4j: Cosine: vector.similarity.cosine(fact_embedding, $query_vec)
             Neo4j-->>Core: Edges by vector similarity
+        and Community Search (if community_config enabled)
+            Core->>Neo4j: BM25 + Cosine on Community nodes (NO BFS)
+            Neo4j-->>Core: Communities by relevance
         end
-        
+
         Note over Core: RRF Fusion: score = Σ 1/(k + rank_i)
         Core->>Core: Merge results using Reciprocal Rank Fusion (k=60)
 
     else Config: EDGE_HYBRID_SEARCH_CROSS_ENCODER (With BFS + vLLM Reranking)
-        par Method 1: BM25 Search
-            Core->>Neo4j: CALL db.index.fulltext.queryRelationships('edge_name_and_fact', $query)<br/>YIELD relationship AS rel, score<br/>MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
-            Neo4j-->>Core: Text-matched edges with BM25 scores
-        and Method 2: Cosine Search
-            Core->>Neo4j: MATCH (n:Entity)-[e:RELATES_TO]->(m:Entity)<br/>WITH e, vector.similarity.cosine(e.fact_embedding, $search_vector) AS score<br/>WHERE score > $min_score
-            Neo4j-->>Core: Embedding-matched edges with cosine scores
-        and Method 3: BFS Graph Traversal
-            Note over Core, Neo4j: BFS uses origin nodes from BM25+Cosine results
-            Core->>Neo4j: UNWIND $bfs_origin_node_uuids AS origin_uuid<br/>MATCH path = (origin {uuid: origin_uuid})-[:RELATES_TO|MENTIONS*1..3]->(:Entity)<br/>UNWIND relationships(path) AS rel<br/>MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]-(m:Entity)
-            Neo4j-->>Core: Edges within 1-3 hops of origin nodes
+        par Step 1: BM25 + Cosine (parallel)
+            Core->>Neo4j: BM25 Search on edges
+            Neo4j-->>Core: Text-matched edges
+        and
+            Core->>Neo4j: Cosine Search on edges
+            Neo4j-->>Core: Embedding-matched edges
+        and Community Search (if community_config enabled)
+            Core->>Neo4j: BM25 + Cosine on Community nodes (NO BFS)
+            Neo4j-->>Core: Communities by relevance
         end
 
+        Note right of Core: Step 2: BFS requires BM25+Cosine results first<br/>(origin nodes extracted from initial results)
+        Core->>Neo4j: BFS Graph Traversal<br/>UNWIND $bfs_origin_node_uuids AS origin_uuid<br/>MATCH path = (origin)-[:RELATES_TO|MENTIONS*1..3]->(:Entity)
+        Neo4j-->>Core: Edges within 1-3 hops of origin nodes
+
         Note over Core, Reranker: Cross-Encoder Reranking (vLLM) | 👍 sem_topk
-        Core->>Reranker: VLLMRerankerClient.rank(query, facts)<br/>Prompt: "Rate relevance 0-100. Query: {query} Passage: {fact}"<br/>vLLM returns score, normalized to 0-1
+        Core->>Reranker: VLLMRerankerClient.rank(query, facts)<br/>Prompt: "Rate relevance 0-100. Query: {query} Passage: {fact}"
         Reranker-->>Core: Reranked edge list sorted by relevance score
     end
 
