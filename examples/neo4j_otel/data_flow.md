@@ -42,6 +42,12 @@ Nodes: [Episodic:ef48db72, Entity:198d581d (Alice), Entity:a1b2c3d4 (TechCorp)]
 Edges: [MENTIONS×2, RELATES_TO×1]
 ```
 
+**Graph State After build_communities() (if called after Turn 1):**
+```
++1 Community: "Alice Chen's professional context" (members: Alice Chen, TechCorp)
++2 HAS_MEMBER edges: Community → Alice Chen, Community → TechCorp
+```
+
 #### Turn 2: Project Information
 **Input Message:** `"Alice Chen(user): I'm currently leading Project Phoenix, a major cloud migration initiative."`
 
@@ -128,6 +134,7 @@ Final Counts:
 - **Summary Generation is parallel**: Call 5 has 2 responses (Alice Chen + TechCorp summaries)
 - **Entity deduplication reuses UUIDs**: "Alice Chen" in Turn 2/3 maps to the UUID from Turn 1
 - **Edge deduplication detects duplicates**: Turn 3's "leads Project Phoenix" is flagged as duplicate of Turn 2's "leading Project Phoenix"
+- **Community requires manual initialization**: `update_communities=True` has no effect until `build_communities()` is called first
 
 ---
 
@@ -214,6 +221,7 @@ sequenceDiagram
     Note over Core, Neo4j: Phase 8: Community Update (OPTIONAL, PARALLEL) | update_communities=False by default | 👍 sem_agg
     Note right of Core: Runs AFTER Phase 7 bulk save completes<br/>Writes IMMEDIATELY (not bulk save)
     opt update_communities=True
+        Note right of Core: ⚠️ IMPORTANT: update_community() only adds entities<br/>to EXISTING communities. It does NOT create new ones.<br/>Call build_communities() first to initialize communities.
         par For each entity node (parallel via semaphore_gather)
             Core->>Neo4j: determine_entity_community<br/>1. Check if entity already has community<br/>2. Find neighboring entities' communities
             Neo4j-->>Core: (community, is_new) tuple
@@ -235,6 +243,49 @@ sequenceDiagram
     Core-->>App: EpisodeResult (nodes, edges, communities)
 ```
 
+#### 1.2.1 build_communities() Flow (Maintenance Operation)
+
+This is a **separate maintenance operation**, not part of `add_episode()`. Call it manually after initial data is loaded to create communities.
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Core as Graphiti Core
+    participant LLM as LLM
+    participant Neo4j as Neo4j
+
+    Note over App, Neo4j: === build_communities(group_ids) ===
+
+    App->>Core: build_communities(group_ids)
+
+    Note over Core, Neo4j: Step 1: Get all entities
+    Core->>Neo4j: MATCH (e:Entity) WHERE e.group_id IN $group_ids<br/>RETURN e
+    Neo4j-->>Core: All entity nodes
+
+    Note over Core, Neo4j: Step 2: Build neighbor graph via RELATES_TO edges
+    Core->>Neo4j: MATCH (e:Entity)-[:RELATES_TO]-(neighbor:Entity)<br/>RETURN e.uuid, neighbor.uuid
+    Neo4j-->>Core: Entity adjacency list
+
+    Note over Core: Step 3: Label Propagation Clustering
+    Core->>Core: cluster_entities(entities, edges)<br/>→ Groups of related entities
+
+    Note over Core, LLM: Step 4: For each cluster, create Community
+    par For each cluster (parallel)
+        Core->>LLM: summarize_pair(entity1.summary, entity2.summary, ...)
+        LLM-->>Core: Merged cluster summary
+        Core->>LLM: generate_summary_description(merged_summary)
+        LLM-->>Core: Community name
+        Core->>Neo4j: MERGE (c:Community {uuid})<br/>SET c.name, c.summary, c.name_embedding
+        Core->>Neo4j: CREATE (c)-[:HAS_MEMBER]->(entity) for each entity
+    end
+
+    Core-->>App: (community_nodes, community_edges)
+```
+
+**Typical Duration:** ~1-2 seconds (depends on number of entities)
+
+---
+
 ### 1.3 Time Breakdown (from trace logs)
 
 | Phase | Duration | Component |
@@ -245,6 +296,8 @@ sequenceDiagram
 | Summary Generation | ~0.6s | LLM (parallel) |
 | Neo4j Queries | ~0.7s | DB |
 | **Total** | **~6.5s** | **LLM: 89%** |
+| Community Update (if enabled) | +500-1000ms | LLM (per turn) |
+| `build_communities()` | ~1-2s | LLM (one-time) |
 
 ---
 
@@ -629,6 +682,25 @@ RETURN e.uuid AS uuid
 
 **Graph State After Step 8:** See "Graph State After Turn 1" in Section 1.1.
 
+---
+
+#### Step 9 (Optional): Community Update
+
+> **Condition:** `update_communities=True` AND communities already exist (via `build_communities()`)
+
+**Process (for each entity, parallel via semaphore_gather):**
+1. `determine_entity_community(entity)` → Find neighboring community
+2. If community found:
+   - `summarize_pair(entity.summary, community.summary)` → Merged summary
+   - `generate_summary_description(merged_summary)` → New community name
+   - Save updated community to DB
+
+**LLM Calls:** 2 per entity that joins a community (summarize_pair + summary_description)
+
+**Note:** If no communities exist, this step does nothing. Call `build_communities()` first to initialize.
+
+---
+
 ### 1.5 Data Model and Handling Logic
 
 This section combines data structure definitions with their handling logic (duplicate, update, invalidation).
@@ -734,6 +806,58 @@ new_edge.valid_at = message_timestamp
 ```
 
 **Handling:** Created automatically via `build_episodic_edges()` for each entity mentioned in an episode.
+
+---
+
+#### CommunityNode (Has Embedding)
+```python
+{
+    "uuid": "c1234567-...",
+    "name": "Alice Chen's professional context at TechCorp",  # Generated by LLM
+    "summary": "Alice Chen, a senior software engineer at TechCorp, leads Project Phoenix...",
+    "name_embedding": [-0.0312, 0.0198, ...],  # 384-dim vector
+    "group_id": "demo_session_..."
+}
+```
+
+**Community Structure:**
+```
+┌─────────────────────────────────────────────────┐
+│ Community: "Alice Chen's professional context"  │
+│ summary: "Alice Chen, senior engineer at..."    │
+└─────────────┬───────────────────┬───────────────┘
+              │ HAS_MEMBER        │ HAS_MEMBER
+              ▼                   ▼
+        ┌───────────┐       ┌───────────┐
+        │ Alice Chen│       │ TechCorp  │
+        └───────────┘       └───────────┘
+```
+
+#### CommunityEdge (HAS_MEMBER Relationship)
+```python
+{
+    "uuid": "ce1234567-...",
+    "source_node_uuid": "c1234567-...",  # Community UUID
+    "target_node_uuid": "198d581d-...",  # Entity UUID (Alice Chen)
+    "group_id": "demo_session_..."
+    # Creates (Community)-[:HAS_MEMBER]->(Entity) in Neo4j
+}
+```
+
+**Community Methods:**
+
+| Method | Purpose | Creates New Communities? |
+|--------|---------|-------------------------|
+| `build_communities(group_ids)` | Create communities from scratch using Label Propagation clustering | ✅ Yes |
+| `update_community(entity)` | Add entity to **existing** neighboring community | ❌ No |
+
+**Design Limitation:**
+- `update_community()` is purely incremental — it only assigns entities to already-existing communities
+- On a fresh graph with no communities, `update_communities=True` has **no effect**
+- User must manually call `build_communities()` after initial data is loaded
+
+**Bug Fix Note:**
+> The original Graphiti source code (`graphiti.py` lines 953-962) had a bug in unpacking `semaphore_gather` results for community updates. This was fixed to correctly iterate over `(community_nodes, community_edges)` tuples.
 
 
 ---
@@ -928,6 +1052,30 @@ LIMIT $limit
 
 ---
 
+#### Step 2d (Optional): Community Search
+
+> **Condition:** `community_config` is not None (default: None, disabled)
+
+**Query (runs in parallel with edge search):**
+```cypher
+-- BM25 Search on Community nodes
+CALL db.index.fulltext.queryNodes("community_name_and_summary", $query, {limit: $limit})
+YIELD node AS n, score WHERE n.group_id IN $group_ids
+RETURN n.uuid, n.name, n.summary
+
+-- Cosine Similarity Search on Community nodes
+MATCH (c:Community) WHERE c.group_id IN $group_ids
+WITH c, vector.similarity.cosine(c.name_embedding, $search_vector) AS score
+WHERE score > $min_score
+RETURN c.uuid, c.name, c.summary
+```
+
+**Result:** Communities matching the query, returned in `SearchResults.communities`
+
+**Note:** Community search does NOT use BFS — it's a direct search on Community nodes.
+
+---
+
 #### Step 3: Reranking
 
 **Without BFS (RRF - Reciprocal Rank Fusion):**
@@ -984,8 +1132,16 @@ SearchResults(
     node_reranker_scores=[],
     episodes=[],
     episode_reranker_scores=[],
-    communities=[],
-    community_reranker_scores=[]
+    communities=[
+        CommunityNode(
+            uuid="c1234567-...",
+            name="Alice Chen's professional context at TechCorp",
+            summary="Alice Chen, a senior software engineer at TechCorp, leads Project Phoenix, a cloud migration initiative due February 15th with 3 team members.",
+            group_id="demo_session_...",
+            ...
+        )
+    ],  # Populated when community_config is enabled and communities exist
+    community_reranker_scores=[0.78]
 )
 ```
 
