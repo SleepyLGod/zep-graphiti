@@ -30,6 +30,16 @@ This document describes the data flow of Graphiti operations using relational al
 | `embed(text)` | Embedding | Convert text to vector (384-dim) |
 | `[LIMIT k]` | Top-k | Return at most `k` results |
 
+### LOTUS Semantic Operators
+
+| Operator | Signature | Semantics | Langex Pattern |
+|----------|-----------|-----------|----------------|
+| `sem_map(l: X→Y)` | single row → new column | Projection generating new structured data | "Extract/Generate ... from input" |
+| `sem_join(t: T, l: (X,Y)→Bool)` | two tables + predicate → matched rows | Semantic join by NL predicate | "Is X same as Y?" |
+| `sem_filter(l: X→Bool)` | single row → bool | Filter rows by NL predicate | "Does X satisfy ...?" |
+| `sem_agg(l: L[X]→X)` | multiple rows → single value | Aggregation reducing inputs | "Synthesize/Combine ..." |
+| `sem_topk(k, l: L[X]→L[X])` | multiple rows → ranked top-k | Semantic ranking | "Rank by relevance to ..." |
+
 ### Logical Operators
 
 | Symbol | Name | Meaning |
@@ -90,20 +100,22 @@ sequenceDiagram
     end
 
     rect rgb(230, 240, 255)
-        Note over Py, LLM: Phase 2: Entity Extraction (sem_map)
+        Note over Py, LLM: Phase 2: Entity Extraction
+        Note right of Py: sem_map((m, E_prev), "Extract entity nodes<br/>mentioned in CURRENT MESSAGE")
         Py->>LLM: extract_nodes(m, E_prev)
         LLM-->>Py: N_ext : list[{name, type_id}]
         Note right of Py: Convert to EntityNode objects<br/>N_raw : list[EntityNode]
     end
 
     rect rgb(245, 245, 220)
-        Note over Py, Neo4j: Phase 3: Entity Deduplication (sem_topk + sem_filter)
+        Note over Py, Neo4j: Phase 3: Entity Deduplication
         par ∀ n ∈ N_raw (parallel hybrid search)
             Py->>Neo4j: C_n = RRF(<br/>  FTS('node_name_and_summary', n.name, g) [LIMIT 2k],<br/>  τ_{score↓}(σ_{score>0.6}(Entity ⊗_{cosine(name_embedding, embed(n.name))})) [LIMIT 2k]<br/>)
             Neo4j-->>Py: C_n : list[EntityNode]
         end
         Note right of Py: C_all = dedupe(⋃ C_n)
         alt |C_all| > 0 ∧ ∃ unresolved
+            Note right of Py: sem_join(N_raw × C_all, "Is new entity<br/>same real-world object as existing?")
             Py->>LLM: dedupe_nodes(N_raw, C_all, m, E_prev) → single LLM call
             LLM-->>Py: R : list[{id, name, duplicate_idx}]
         end
@@ -111,14 +123,15 @@ sequenceDiagram
     end
 
     rect rgb(230, 240, 255)
-        Note over Py, LLM: Phase 4: Edge Extraction (sem_map)
+        Note over Py, LLM: Phase 4: Edge Extraction
+        Note right of Py: sem_map((m, N, E_prev, t), "Extract fact triples<br/>between entities from message")
         Py->>LLM: extract_edges(m, N_raw, E_prev)
         LLM-->>Py: F_ext : list[{src_id, tgt_id, relation, fact, valid_at}]
         Note right of Py: Convert to EntityEdge, remap UUIDs<br/>F_raw : list[EntityEdge]
     end
 
     rect rgb(245, 245, 220)
-        Note over Py, Neo4j: Phase 5: Edge Deduplication (sem_topk + sem_filter)
+        Note over Py, Neo4j: Phase 5: Edge Deduplication
         Note right of Py: ∀ f ∈ F_raw: f.fact_embedding = embed(f.fact)
         par ∀ f ∈ F_raw (get edges between same nodes)
             Py->>Neo4j: E_between = σ_{src=f.src ∧ tgt=f.tgt} (RELATES_TO)
@@ -133,6 +146,7 @@ sequenceDiagram
             Neo4j-->>Py: I_f : list[EntityEdge] (invalidation candidates)
         end
         par ∀ f : |C_f| > 0 (parallel LLM calls per edge)
+            Note right of Py: sem_join({f} × C_f, "Is new fact identical?")<br/>sem_filter(I_f, "Does new fact contradict?")
             Py->>LLM: dedupe_edge(f.fact, C_f, I_f)
             LLM-->>Py: {duplicate_facts[], contradicted_facts[]}
         end
@@ -140,8 +154,9 @@ sequenceDiagram
     end
 
     rect rgb(230, 240, 255)
-        Note over Py, LLM: Phase 6: Summary Generation (sem_agg, parallel)
+        Note over Py, LLM: Phase 6: Summary Generation
         par ∀ n ∈ N (parallel)
+            Note right of Py: sem_map((n, m, E_prev), "Generate summary<br/>for entity from messages")
             Py->>LLM: extract_summary(n, m, E_prev)
             LLM-->>Py: n.summary : str
         end
@@ -169,8 +184,10 @@ sequenceDiagram
                     Note right of Py: c = mode(C_neighbor) — most frequent
                 end
                 alt c ≠ null
+                    Note right of Py: sem_agg([n.summary, c.summary],<br/>"Synthesize into single summary")
                     Py->>LLM: summarize_pair(n.summary, c.summary)
                     LLM-->>Py: c.summary_new
+                    Note right of Py: sem_map(c.summary_new,<br/>"Create description of summary")
                     Py->>LLM: summary_description(c.summary_new)
                     LLM-->>Py: c.name_new
                     Note right of Py: c.name_embedding = embed(c.name_new)
@@ -261,13 +278,16 @@ sequenceDiagram
             Neo4j-->>Py: entities : list[EntityNode]
             Note right of Py: summaries = [e.summary for e in entities]
             loop while |summaries| > 1 (pairwise reduction)
+                Note right of Py: sem_agg(partition=pairwise)
                 par ∀ (s1, s2) ∈ pairs(summaries)
+                    Note right of Py: sem_agg([s1, s2], "Synthesize into one")
                     Py->>LLM: summarize_pair(s1, s2)
                     LLM-->>Py: merged_summary
                 end
                 Note right of Py: summaries = merged + odd_one_out
             end
             Note right of Py: community_summary = summaries[0]
+            Note right of Py: sem_map(summary, "Create description")
             Py->>LLM: summary_description(community_summary)
             LLM-->>Py: community_name
             Note right of Py: c = CommunityNode(name, summary, group_id)<br/>c.name_embedding = embed(c.name)
@@ -384,6 +404,7 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: E_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.edge_config.reranker = cross_encoder
+                Note right of Py: sem_topk(k, E_all, "Rank by relevance to q")
                 Py->>LLM: rank(q, [e.fact for e in E_all[:k]])
                 LLM-->>Py: E_ranked, scores
             else cfg.edge_config.reranker = node_distance
@@ -401,6 +422,7 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: N_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.node_config.reranker = cross_encoder
+                Note right of Py: sem_topk(k, N_all, "Rank by relevance to q")
                 Py->>LLM: rank(q, [n.name for n in N_all])
                 LLM-->>Py: N_ranked, scores
             else cfg.node_config.reranker = episode_mentions
@@ -417,6 +439,7 @@ sequenceDiagram
                 Note right of Py: Ep_ranked, scores = RRF([Ep_bm25], θ)
             else cfg.episode_config.reranker = cross_encoder
                 Note right of Py: Ep_rrf = RRF([Ep_bm25])[:k]
+                Note right of Py: sem_topk(k, Ep_rrf, "Rank by relevance to q")
                 Py->>LLM: rank(q, [ep.content for ep in Ep_rrf])
                 LLM-->>Py: Ep_ranked, scores
             end
@@ -428,6 +451,7 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: C_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.community_config.reranker = cross_encoder
+                Note right of Py: sem_topk(k, C_all, "Rank by relevance to q")
                 Py->>LLM: rank(q, [c.name for c in C_all])
                 LLM-->>Py: C_ranked, scores
             end
