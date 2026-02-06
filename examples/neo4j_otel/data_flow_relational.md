@@ -1,72 +1,6 @@
 # Graphiti Data Flow - Relational Algebra Notation
 
-This document describes the data flow of Graphiti operations using relational algebra notation.
-
-## Symbol Reference
-
-### Relational Algebra Operators
-
-| Symbol | Name | Meaning | SQL Equivalent |
-|--------|------|---------|----------------|
-| `σ` | Selection | Filter rows | `WHERE` |
-| `π` | Projection | Select columns | `SELECT cols` |
-| `τ↓` / `τ↑` | Sort | Order desc/asc | `ORDER BY ... DESC/ASC` |
-| `⊗_{f}` | Cross product with score | Cartesian product with computed score | `CROSS JOIN` + computed column |
-| `⋈` | Join | Natural/equi join | `JOIN` |
-| `∪` | Union | Combine results | `UNION` |
-| `∩` | Intersection | Common results | `INTERSECT` |
-| `−` | Difference | Set difference | `EXCEPT` |
-
-### Search & Aggregation Functions
-
-| Symbol | Name | Meaning |
-|--------|------|---------|
-| `FTS(idx, q, G)` | Full-text search | BM25 search on index `idx` with query `q`, filtered by group_ids `G` |
-| `cosine(v1, v2)` | Cosine similarity | Vector similarity between embeddings |
-| `BFS(origins, d, G)` | Breadth-first search | Graph traversal from `origins` up to depth `d` |
-| `RRF([...], θ)` | Reciprocal Rank Fusion | Rank fusion algorithm with min_score `θ` |
-| `MMR(q_vec, vecs, λ, θ)` | Maximal Marginal Relevance | Diversity-aware reranking |
-| `mode(X)` | Mode | Most frequent value in set `X` |
-| `embed(text)` | Embedding | Convert text to vector (384-dim) |
-| `[LIMIT k]` | Top-k | Return at most `k` results |
-
-### LOTUS Semantic Operators
-
-| Operator | Signature | Semantics | Langex Pattern |
-|----------|-----------|-----------|----------------|
-| `sem_map(l: X→Y)` | single row → new column | Projection generating new structured data | "Extract/Generate ... from input" |
-| `sem_join(t: T, l: (X,Y)→Bool)` | two tables + predicate → matched rows | Semantic join by NL predicate | "Is X same as Y?" |
-| `sem_filter(l: X→Bool)` | single row → bool | Filter rows by NL predicate | "Does X satisfy ...?" |
-| `sem_agg(l: L[X]→X)` | multiple rows → single value | Aggregation reducing inputs | "Synthesize/Combine ..." |
-| `sem_topk(k, l: L[X]→L[X])` | multiple rows → ranked top-k | Semantic ranking | "Rank by relevance to ..." |
-
-### Logical Operators
-
-| Symbol | Name | Meaning |
-|--------|------|---------|
-| `∀` | For all | Universal quantifier (iteration) |
-| `∃` | Exists | Existential quantifier |
-| `∧` | And | Logical conjunction |
-| `∨` | Or | Logical disjunction |
-| `¬` | Not | Logical negation |
-
-### Variable Naming Convention
-
-| Variable | Type | Description |
-|----------|------|-------------|
-| `m` | `text` | Raw message input |
-| `g` | `str` | group_id |
-| `t` | `datetime` | reference_time |
-| `q` | `text` | Search query |
-| `q_vec` | `list[float]` | Query embedding vector |
-| `e` | `EpisodicNode` | Episode node |
-| `n` | `EntityNode` | Entity node |
-| `f` | `EntityEdge` | Entity edge (fact/relationship) |
-| `c` | `CommunityNode` | Community node |
-| `E_*` | `list[EpisodicNode]` | List of episodes |
-| `N_*` | `list[EntityNode]` | List of entities |
-| `F_*` | `list[EntityEdge]` | List of edges |
-| `C_*` | `list[CommunityNode]` | List of communities |
+data flow of Graphiti operations using relational algebra notation.
 
 ---
 
@@ -85,7 +19,9 @@ This document describes the data flow of Graphiti operations using relational al
 ### Flow Diagram
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'width': '100%' }}}%%
 sequenceDiagram
+    autonumber
     participant Py as Python Server
     participant LLM as LLM
     participant Neo4j as Neo4j
@@ -101,7 +37,7 @@ sequenceDiagram
 
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 2: Entity Extraction
-        Note right of Py: sem_map((m, E_prev), "Extract entity nodes<br/>mentioned in CURRENT MESSAGE")
+        Note right of Py: sem_map((m, E_prev), "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE")
         Py->>LLM: extract_nodes(m, E_prev)
         LLM-->>Py: N_ext : list[{name, type_id}]
         Note right of Py: Convert to EntityNode objects<br/>N_raw : list[EntityNode]
@@ -115,7 +51,7 @@ sequenceDiagram
         end
         Note right of Py: C_all = dedupe(⋃ C_n)
         alt |C_all| > 0 ∧ ∃ unresolved
-            Note right of Py: sem_join(N_raw × C_all, "Is new entity<br/>same real-world object as existing?")
+            Note right of Py: sem_join(N_raw × C_all, "Does entity refer to the same real-world object or concept as existing?")
             Py->>LLM: dedupe_nodes(N_raw, C_all, m, E_prev) → single LLM call
             LLM-->>Py: R : list[{id, name, duplicate_idx}]
         end
@@ -124,7 +60,7 @@ sequenceDiagram
 
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 4: Edge Extraction
-        Note right of Py: sem_map((m, N, E_prev, t), "Extract fact triples<br/>between entities from message")
+        Note right of Py: sem_map((m, N, E_prev, t), "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE")
         Py->>LLM: extract_edges(m, N_raw, E_prev)
         LLM-->>Py: F_ext : list[{src_id, tgt_id, relation, fact, valid_at}]
         Note right of Py: Convert to EntityEdge, remap UUIDs<br/>F_raw : list[EntityEdge]
@@ -146,7 +82,7 @@ sequenceDiagram
             Neo4j-->>Py: I_f : list[EntityEdge] (invalidation candidates)
         end
         par ∀ f : |C_f| > 0 (parallel LLM calls per edge)
-            Note right of Py: sem_join({f} × C_f, "Is new fact identical?")<br/>sem_filter(I_f, "Does new fact contradict?")
+            Note right of Py: sem_join({f} × C_f, "Does NEW FACT represent identical factual information as EXISTING FACT?")<br/>sem_filter(I_f, "Does NEW FACT contradict EXISTING FACT?")
             Py->>LLM: dedupe_edge(f.fact, C_f, I_f)
             LLM-->>Py: {duplicate_facts[], contradicted_facts[]}
         end
@@ -156,7 +92,7 @@ sequenceDiagram
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 6: Summary Generation
         par ∀ n ∈ N (parallel)
-            Note right of Py: sem_map((n, m, E_prev), "Generate summary<br/>for entity from messages")
+            Note right of Py: sem_map((n, m, E_prev), "Update summary combining relevant information about ENTITY from MESSAGES")
             Py->>LLM: extract_summary(n, m, E_prev)
             LLM-->>Py: n.summary : str
         end
@@ -184,10 +120,10 @@ sequenceDiagram
                     Note right of Py: c = mode(C_neighbor) — most frequent
                 end
                 alt c ≠ null
-                    Note right of Py: sem_agg([n.summary, c.summary],<br/>"Synthesize into single summary")
+                    Note right of Py: sem_agg([n.summary, c.summary], "Synthesize information from two summaries into a single succinct summary")
                     Py->>LLM: summarize_pair(n.summary, c.summary)
                     LLM-->>Py: c.summary_new
-                    Note right of Py: sem_map(c.summary_new,<br/>"Create description of summary")
+                    Note right of Py: sem_map(c.summary_new, "Create short one-sentence description explaining what kind of information is summarized")
                     Py->>LLM: summary_description(c.summary_new)
                     LLM-->>Py: c.name_new
                     Note right of Py: c.name_embedding = embed(c.name_new)
@@ -220,109 +156,7 @@ sequenceDiagram
 
 ---
 
-## 2. build_communities(group_ids) - Community Creation Flow
-
-### Input
-- `G : list[str] | null` - Group IDs to process (null = all groups)
-
-### Output
-- `(communities : list[CommunityNode], edges : list[CommunityEdge])`
-
-### Flow Diagram
-
-```mermaid
-sequenceDiagram
-    participant Py as Python Server
-    participant LLM as LLM
-    participant Neo4j as Neo4j
-
-    Note over Py, Neo4j: Input: G : list[str] | null
-
-    rect rgb(255, 230, 230)
-        Note over Py, Neo4j: Phase 1: Clear Existing Communities
-        Py->>Neo4j: MATCH (c:Community) DETACH DELETE c
-        Neo4j-->>Py: deleted
-    end
-
-    rect rgb(245, 245, 220)
-        Note over Py, Neo4j: Phase 2: Get Group IDs (if null)
-        alt G = null
-            Py->>Neo4j: G = π_{DISTINCT group_id} (σ_{group_id IS NOT NULL} (Entity))
-            Neo4j-->>Py: G : list[str]
-        end
-    end
-
-    rect rgb(230, 240, 255)
-        Note over Py, Neo4j: Phase 3: Build Graph Projection (per group)
-        loop ∀ g ∈ G
-            Py->>Neo4j: N_g = σ_{group_id=g} (Entity)
-            Neo4j-->>Py: N_g : list[EntityNode]
-            loop ∀ n ∈ N_g
-                Py->>Neo4j: neighbors(n) = π_{m.uuid, count(e)} (<br/>  (n:Entity {uuid})-[e:RELATES_TO]-(m:Entity {group_id=g})<br/>)
-                Neo4j-->>Py: list[{uuid, edge_count}]
-            end
-            Note right of Py: projection[g] = {n.uuid → [{neighbor_uuid, edge_count}, ...]}
-        end
-    end
-
-    rect rgb(240, 255, 240)
-        Note over Py: Phase 4: Label Propagation Clustering (in-memory)
-        Note right of Py: Algorithm:<br/>1. ∀ n: label[n] = n.uuid (initial)<br/>2. repeat:<br/>   ∀ n: label[n] = mode(label[neighbor], weighted by edge_count)<br/>   until no change<br/>3. clusters = group_by(label)
-        Note right of Py: Output: clusters : list[list[str]] (uuid lists)
-    end
-
-    rect rgb(230, 240, 255)
-        Note over Py, LLM: Phase 5: Build Community Summaries (parallel per cluster)
-        par ∀ cluster ∈ clusters
-            Py->>Neo4j: entities = σ_{uuid ∈ cluster} (Entity)
-            Neo4j-->>Py: entities : list[EntityNode]
-            Note right of Py: summaries = [e.summary for e in entities]
-            loop while |summaries| > 1 (pairwise reduction)
-                Note right of Py: sem_agg(partition=pairwise)
-                par ∀ (s1, s2) ∈ pairs(summaries)
-                    Note right of Py: sem_agg([s1, s2], "Synthesize into one")
-                    Py->>LLM: summarize_pair(s1, s2)
-                    LLM-->>Py: merged_summary
-                end
-                Note right of Py: summaries = merged + odd_one_out
-            end
-            Note right of Py: community_summary = summaries[0]
-            Note right of Py: sem_map(summary, "Create description")
-            Py->>LLM: summary_description(community_summary)
-            LLM-->>Py: community_name
-            Note right of Py: c = CommunityNode(name, summary, group_id)<br/>c.name_embedding = embed(c.name)
-        end
-    end
-
-    rect rgb(255, 240, 230)
-        Note over Py, Neo4j: Phase 6: Persist Communities
-        par ∀ c ∈ communities
-            Py->>Neo4j: MERGE (c:Community {uuid}) SET {name, summary, group_id, ...}<br/>+ setNodeVectorProperty('name_embedding', vec)
-        end
-        par ∀ (c, n) ∈ community_edges
-            Py->>Neo4j: MERGE (c:Community)-[:HAS_MEMBER]->(n:Entity)
-        end
-        Neo4j-->>Py: committed
-    end
-
-    Py-->>Py: return (communities, edges)
-```
-
-### Query Verification
-
-| Phase | Query | Source Code Reference | Verified |
-|-------|-------|----------------------|----------|
-| 1 | `MATCH (c:Community) DETACH DELETE c` | `community_operations.py:remove_communities()` | ✅ |
-| 2 | `π_{DISTINCT group_id} (Entity)` | `community_operations.py:42-52` | ✅ |
-| 3 | `(n)-[e:RELATES_TO]-(m)` with count | `community_operations.py:58-79` | ✅ |
-| 4 | Label Propagation (in-memory) | `community_operations.py:94-139` | ✅ |
-| 5 | Pairwise summary merging | `community_operations.py:175-198` | ✅ |
-| 5 | `summary_description()` for name | `community_operations.py:159-172` | ✅ |
-
-
----
-
-## 3. search(q, G, cfg) - Search Flow
+## 2. search(q, G, cfg) - Search Flow
 
 ### Input
 - `q : text` - Search query
@@ -335,7 +169,9 @@ sequenceDiagram
 ### Flow Diagram
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'width': '100%' }}}%%
 sequenceDiagram
+    autonumber
     participant Py as Python Server
     participant LLM as LLM/CrossEncoder
     participant Neo4j as Neo4j
@@ -404,7 +240,8 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: E_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.edge_config.reranker = cross_encoder
-                Note right of Py: sem_topk(k, E_all, "Rank by relevance to q")
+                Note right of Py: CrossEncoder impl: OpenAI/Gemini (LLM) or BGE (cross-encoder model)
+                Note right of Py: sem_topk(k, E_all, "Rank by relevance to q") [if LLM-based]
                 Py->>LLM: rank(q, [e.fact for e in E_all[:k]])
                 LLM-->>Py: E_ranked, scores
             else cfg.edge_config.reranker = node_distance
@@ -422,7 +259,8 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: N_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.node_config.reranker = cross_encoder
-                Note right of Py: sem_topk(k, N_all, "Rank by relevance to q")
+                Note right of Py: CrossEncoder impl: OpenAI/Gemini (LLM) or BGE (cross-encoder model)
+                Note right of Py: sem_topk(k, N_all, "Rank by relevance to q") [if LLM-based]
                 Py->>LLM: rank(q, [n.name for n in N_all])
                 LLM-->>Py: N_ranked, scores
             else cfg.node_config.reranker = episode_mentions
@@ -438,8 +276,9 @@ sequenceDiagram
             alt cfg.episode_config.reranker = RRF
                 Note right of Py: Ep_ranked, scores = RRF([Ep_bm25], θ)
             else cfg.episode_config.reranker = cross_encoder
+                Note right of Py: CrossEncoder impl: OpenAI/Gemini (LLM) or BGE (cross-encoder model)
                 Note right of Py: Ep_rrf = RRF([Ep_bm25])[:k]
-                Note right of Py: sem_topk(k, Ep_rrf, "Rank by relevance to q")
+                Note right of Py: sem_topk(k, Ep_rrf, "Rank by relevance to q") [if LLM-based]
                 Py->>LLM: rank(q, [ep.content for ep in Ep_rrf])
                 LLM-->>Py: Ep_ranked, scores
             end
@@ -451,7 +290,8 @@ sequenceDiagram
                 Neo4j-->>Py: vecs : dict[uuid, embedding]
                 Note right of Py: C_ranked, scores = MMR(q_vec, vecs, λ, θ)
             else cfg.community_config.reranker = cross_encoder
-                Note right of Py: sem_topk(k, C_all, "Rank by relevance to q")
+                Note right of Py: CrossEncoder impl: OpenAI/Gemini (LLM) or BGE (cross-encoder model)
+                Note right of Py: sem_topk(k, C_all, "Rank by relevance to q") [if LLM-based]
                 Py->>LLM: rank(q, [c.name for c in C_all])
                 LLM-->>Py: C_ranked, scores
             end
@@ -494,3 +334,174 @@ sequenceDiagram
 5. **MMR formula**: `mmr = λ * cosine(q, doc) + (λ-1) * max_sim(doc, selected)`
 
 
+---
+
+## 3. build_communities(group_ids) - Community Creation Flow (Optional)
+
+### Input
+- `G : list[str] | null` - Group IDs to process (null = all groups)
+
+### Output
+- `(communities : list[CommunityNode], edges : list[CommunityEdge])`
+
+### Flow Diagram
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'width': '100%' }}}%%
+sequenceDiagram
+    autonumber
+    participant Py as Python Server
+    participant LLM as LLM
+    participant Neo4j as Neo4j
+
+    Note over Py, Neo4j: Input: G : list[str] | null
+
+    rect rgb(255, 230, 230)
+        Note over Py, Neo4j: Phase 1: Clear Existing Communities
+        Py->>Neo4j: MATCH (c:Community) DETACH DELETE c
+        Neo4j-->>Py: deleted
+    end
+
+    rect rgb(245, 245, 220)
+        Note over Py, Neo4j: Phase 2: Get Group IDs (if null)
+        alt G = null
+            Py->>Neo4j: G = π_{DISTINCT group_id} (σ_{group_id IS NOT NULL} (Entity))
+            Neo4j-->>Py: G : list[str]
+        end
+    end
+
+    rect rgb(230, 240, 255)
+        Note over Py, Neo4j: Phase 3: Build Graph Projection (per group)
+        loop ∀ g ∈ G
+            Py->>Neo4j: N_g = σ_{group_id=g} (Entity)
+            Neo4j-->>Py: N_g : list[EntityNode]
+            loop ∀ n ∈ N_g
+                Py->>Neo4j: neighbors(n) = π_{m.uuid, count(e)} (<br/>  (n:Entity {uuid})-[e:RELATES_TO]-(m:Entity {group_id=g})<br/>)
+                Neo4j-->>Py: list[{uuid, edge_count}]
+            end
+            Note right of Py: projection[g] = {n.uuid → [{neighbor_uuid, edge_count}, ...]}
+        end
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Py: Phase 4: Label Propagation Clustering (in-memory)
+        Note right of Py: Algorithm:<br/>1. ∀ n: label[n] = n.uuid (initial)<br/>2. repeat:<br/>   ∀ n: label[n] = mode(label[neighbor], weighted by edge_count)<br/>   until no change<br/>3. clusters = group_by(label)
+        Note right of Py: Output: clusters : list[list[str]] (uuid lists)
+    end
+
+    rect rgb(230, 240, 255)
+        Note over Py, LLM: Phase 5: Build Community Summaries (parallel per cluster)
+        par ∀ cluster ∈ clusters
+            Py->>Neo4j: entities = σ_{uuid ∈ cluster} (Entity)
+            Neo4j-->>Py: entities : list[EntityNode]
+            Note right of Py: summaries = [e.summary for e in entities]
+            loop while |summaries| > 1 (pairwise reduction)
+                Note right of Py: sem_agg(partition=pairwise)
+                par ∀ (s1, s2) ∈ pairs(summaries)
+                    Note right of Py: sem_agg([s1, s2], "Synthesize information from two summaries into a single succinct summary")
+                    Py->>LLM: summarize_pair(s1, s2)
+                    LLM-->>Py: merged_summary
+                end
+                Note right of Py: summaries = merged + odd_one_out
+            end
+            Note right of Py: community_summary = summaries[0]
+            Note right of Py: sem_map(summary, "Create short one-sentence description explaining what kind of information is summarized")
+            Py->>LLM: summary_description(community_summary)
+            LLM-->>Py: community_name
+            Note right of Py: c = CommunityNode(name, summary, group_id)<br/>c.name_embedding = embed(c.name)
+        end
+    end
+
+    rect rgb(255, 240, 230)
+        Note over Py, Neo4j: Phase 6: Persist Communities
+        par ∀ c ∈ communities
+            Py->>Neo4j: MERGE (c:Community {uuid}) SET {name, summary, group_id, ...}<br/>+ setNodeVectorProperty('name_embedding', vec)
+        end
+        par ∀ (c, n) ∈ community_edges
+            Py->>Neo4j: MERGE (c:Community)-[:HAS_MEMBER]->(n:Entity)
+        end
+        Neo4j-->>Py: committed
+    end
+
+    Py-->>Py: return (communities, edges)
+```
+
+### Query Verification
+
+| Phase | Query | Source Code Reference | Verified |
+|-------|-------|----------------------|----------|
+| 1 | `MATCH (c:Community) DETACH DELETE c` | `community_operations.py:remove_communities()` | ✅ |
+| 2 | `π_{DISTINCT group_id} (Entity)` | `community_operations.py:42-52` | ✅ |
+| 3 | `(n)-[e:RELATES_TO]-(m)` with count | `community_operations.py:58-79` | ✅ |
+| 4 | Label Propagation (in-memory) | `community_operations.py:94-139` | ✅ |
+| 5 | Pairwise summary merging | `community_operations.py:175-198` | ✅ |
+| 5 | `summary_description()` for name | `community_operations.py:159-172` | ✅ |
+
+
+---
+
+## Symbol Reference
+
+### Relational Algebra Operators
+
+| Symbol | Name | Meaning | SQL Equivalent |
+|--------|------|---------|----------------|
+| `σ` | Selection | Filter rows | `WHERE` |
+| `π` | Projection | Select columns | `SELECT cols` |
+| `τ↓` / `τ↑` | Sort | Order desc/asc | `ORDER BY ... DESC/ASC` |
+| `⊗_{f}` | Cross product with score | Cartesian product with computed score | `CROSS JOIN` + computed column |
+| `⋈` | Join | Natural/equi join | `JOIN` |
+| `∪` | Union | Combine results | `UNION` |
+| `∩` | Intersection | Common results | `INTERSECT` |
+| `−` | Difference | Set difference | `EXCEPT` |
+
+### Search & Aggregation Functions
+
+| Symbol | Name | Meaning |
+|--------|------|---------|
+| `FTS(idx, q, G)` | Full-text search | BM25 search on index `idx` with query `q`, filtered by group_ids `G` |
+| `cosine(v1, v2)` | Cosine similarity | Vector similarity between embeddings |
+| `BFS(origins, d, G)` | Breadth-first search | Graph traversal from `origins` up to depth `d` |
+| `RRF([...], θ)` | Reciprocal Rank Fusion | Rank fusion algorithm with min_score `θ` |
+| `MMR(q_vec, vecs, λ, θ)` | Maximal Marginal Relevance | Diversity-aware reranking |
+| `mode(X)` | Mode | Most frequent value in set `X` |
+| `embed(text)` | Embedding | Convert text to vector (384-dim) |
+| `[LIMIT k]` | Top-k | Return at most `k` results |
+
+### LOTUS Semantic Operators
+
+| Operator | Signature | Semantics | Langex Pattern |
+|----------|-----------|-----------|----------------|
+| `sem_map(l: X→Y)` | single row → new column | Projection generating new structured data | "Extract/Generate ... from input" |
+| `sem_join(t: T, l: (X,Y)→Bool)` | two tables + predicate → matched rows | Semantic join by NL predicate | "Is X same as Y?" |
+| `sem_filter(l: X→Bool)` | single row → bool | Filter rows by NL predicate | "Does X satisfy ...?" |
+| `sem_agg(l: L[X]→X)` | multiple rows → single value | Aggregation reducing inputs | "Synthesize/Combine ..." |
+| `sem_topk(k, l: L[X]→L[X])` | multiple rows → ranked top-k | Semantic ranking | "Rank by relevance to ..." |
+
+### Logical Operators
+
+| Symbol | Name | Meaning |
+|--------|------|---------|
+| `∀` | For all | Universal quantifier (iteration) |
+| `∃` | Exists | Existential quantifier |
+| `∧` | And | Logical conjunction |
+| `∨` | Or | Logical disjunction |
+| `¬` | Not | Logical negation |
+
+### Variable Naming Convention
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `m` | `text` | Raw message input |
+| `g` | `str` | group_id |
+| `t` | `datetime` | reference_time |
+| `q` | `text` | Search query |
+| `q_vec` | `list[float]` | Query embedding vector |
+| `e` | `EpisodicNode` | Episode node |
+| `n` | `EntityNode` | Entity node |
+| `f` | `EntityEdge` | Entity edge (fact/relationship) |
+| `c` | `CommunityNode` | Community node |
+| `E_*` | `list[EpisodicNode]` | List of episodes |
+| `N_*` | `list[EntityNode]` | List of entities |
+| `F_*` | `list[EntityEdge]` | List of edges |
+| `C_*` | `list[CommunityNode]` | List of communities |
