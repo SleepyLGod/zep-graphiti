@@ -37,8 +37,7 @@ sequenceDiagram
 
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 2: Entity Extraction
-        Note right of Py: sem_map((m, E_prev), "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE")
-        Py->>LLM: extract_nodes(m, E_prev)
+        Py->>LLM: extract_nodes(m, E_prev): <br/> sem_map((m, E_prev), "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE")
         LLM-->>Py: N_ext : list[{name, type_id}]
         Note right of Py: Convert to EntityNode objects<br/>N_raw : list[EntityNode]
     end
@@ -51,8 +50,7 @@ sequenceDiagram
         end
         Note right of Py: C_all = dedupe(⋃ C_n)
         alt |C_all| > 0 ∧ ∃ unresolved
-            Note right of Py: sem_join(N_raw × C_all, "Does entity refer to the same real-world object or concept as existing?")
-            Py->>LLM: dedupe_nodes(N_raw, C_all, m, E_prev) → single LLM call
+            Py->>LLM: dedupe_nodes(N_raw, C_all, m, E_prev) → single LLM call:<br/>sem_join(N_raw × C_all, "Does entity refer to the same real-world object or concept as existing?")
             LLM-->>Py: R : list[{id, name, duplicate_idx}]
         end
         Note right of Py: Build uuid_map: new_uuid → existing_uuid<br/>N : list[EntityNode] (resolved)
@@ -60,8 +58,7 @@ sequenceDiagram
 
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 4: Edge Extraction
-        Note right of Py: sem_map((m, N, E_prev, t), "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE")
-        Py->>LLM: extract_edges(m, N_raw, E_prev)
+        Py->>LLM: extract_edges(m, N_raw, E_prev): <br/> sem_map((m, N, E_prev, t), "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE")
         LLM-->>Py: F_ext : list[{src_id, tgt_id, relation, fact, valid_at}]
         Note right of Py: Convert to EntityEdge, remap UUIDs<br/>F_raw : list[EntityEdge]
     end
@@ -82,8 +79,7 @@ sequenceDiagram
             Neo4j-->>Py: I_f : list[EntityEdge] (invalidation candidates)
         end
         par ∀ f : |C_f| > 0 (parallel LLM calls per edge)
-            Note right of Py: sem_join({f} × C_f, "Does NEW FACT represent identical factual information as EXISTING FACT?")<br/>sem_filter(I_f, "Does NEW FACT contradict EXISTING FACT?")
-            Py->>LLM: dedupe_edge(f.fact, C_f, I_f)
+            Py->>LLM: dedupe_edge(f.fact, C_f, I_f): <br/>sem_join({f} × C_f, "Does NEW FACT represent identical factual information as EXISTING FACT?")<br/>sem_filter(I_f, "Does NEW FACT contradict EXISTING FACT?")
             LLM-->>Py: {duplicate_facts[], contradicted_facts[]}
         end
         Note right of Py: F : list[EntityEdge] (new/updated)<br/>F_inv : list[EntityEdge] (invalidated)
@@ -92,8 +88,7 @@ sequenceDiagram
     rect rgb(230, 240, 255)
         Note over Py, LLM: Phase 6: Summary Generation
         par ∀ n ∈ N (parallel)
-            Note right of Py: sem_map((n, m, E_prev), "Update summary combining relevant information about ENTITY from MESSAGES")
-            Py->>LLM: extract_summary(n, m, E_prev)
+            Py->>LLM: extract_summary(n, m, E_prev): <br/>sem_map((n, m, E_prev), "Update summary combining relevant information about ENTITY from MESSAGES")
             LLM-->>Py: n.summary : str
         end
         Note right of Py: ∀ n ∈ N: n.name_embedding = embed(n.name)
@@ -120,11 +115,9 @@ sequenceDiagram
                     Note right of Py: c = mode(C_neighbor) — most frequent
                 end
                 alt c ≠ null
-                    Note right of Py: sem_agg([n.summary, c.summary], "Synthesize information from two summaries into a single succinct summary")
-                    Py->>LLM: summarize_pair(n.summary, c.summary)
+                    Py->>LLM: summarize_pair(n.summary, c.summary): <br/>sem_agg([n.summary, c.summary], "Synthesize information from two summaries into a single succinct summary")
                     LLM-->>Py: c.summary_new
-                    Note right of Py: sem_map(c.summary_new, "Create short one-sentence description explaining what kind of information is summarized")
-                    Py->>LLM: summary_description(c.summary_new)
+                    Py->>LLM: summary_description(c.summary_new): <br/>sem_map(c.summary_new, "Create short one-sentence description explaining what kind of information is summarized")
                     LLM-->>Py: c.name_new
                     Note right of Py: c.name_embedding = embed(c.name_new)
                     Py->>Neo4j: MERGE (c:Community {uuid}) SET {name, summary, ...}<br/>+ setNodeVectorProperty('name_embedding', vec)
@@ -138,21 +131,6 @@ sequenceDiagram
 
     Py-->>Py: return AddEpisodeResults(episode=e, nodes=N, edges=F∪F_inv, communities=...)
 ```
-
-### Query Verification
-
-| Phase | Query | Source Code Reference | Verified |
-|-------|-------|----------------------|----------|
-| 1 | `τ_{created_at↓} (σ_{group_id=g} (Episodic)) [LIMIT 10]` | `graphiti.py:870-880` | ✅ |
-| 3 | `FTS('node_name_and_summary', n.name, g)` | `search_utils.py:641-654` | ✅ |
-| 3 | `Entity ⊗_{cosine(name_embedding, vec)}` | `search_utils.py:754-770` | ✅ |
-| 5 | `σ_{src=f.src ∧ tgt=f.tgt} (RELATES_TO)` | `edge_operations.py:321-326` | ✅ |
-| 5 | `FTS('edge_name_and_fact', f.fact, g)` | `search_utils.py:269-282` | ✅ |
-| 5 | `RELATES_TO ⊗_{cosine(fact_embedding, vec)}` | `search_utils.py:414-428` | ✅ |
-| 6 | Summary uses only `(n, m, E_prev)` | `node_operations.py:644-653` | ✅ |
-| 8 | `σ_{(c)-[:HAS_MEMBER]->(n)} (Community)` | `community_operations.py:272-279` | ✅ |
-| 8 | `mode(C_neighbor)` not `LIMIT 1` | `community_operations.py:305-321` | ✅ |
-
 
 ---
 
@@ -306,25 +284,6 @@ sequenceDiagram
     Py-->>Py: return SearchResults(edges, nodes, episodes, communities, scores)
 ```
 
-### Query Verification
-
-| Phase | Query | Source Code Reference | Verified |
-|-------|-------|----------------------|----------|
-| 1 | Embedding only if cosine/MMR needed | `search.py:88-109` | ✅ |
-| 2 | `FTS('edge_name_and_fact', q, G)` | `search_utils.py:182-294` | ✅ |
-| 2 | `RELATES_TO ⊗_{cosine(fact_embedding, q_vec)}` | `search_utils.py:297-442` | ✅ |
-| 2 | Edge BFS with depth | `search_utils.py:445-570` | ✅ |
-| 2 | `FTS('node_name_and_summary', q, G)` | `search_utils.py:573-666` | ✅ |
-| 2 | `Entity ⊗_{cosine(name_embedding, q_vec)}` | `search_utils.py:669-784` | ✅ |
-| 2 | Node BFS with depth | `search_utils.py:787-880` | ✅ |
-| 2 | `FTS('episode_content', q, G)` - BM25 only | `search_utils.py:883-966` | ✅ |
-| 2 | `FTS('community_name', q, G)` | `search_utils.py:969-1055` | ✅ |
-| 2 | `Community ⊗_{cosine(name_embedding, q_vec)}` | `search_utils.py:1058-1173` | ✅ |
-| 3 | RRF algorithm | `search_utils.py:1777-1792` | ✅ |
-| 3 | MMR algorithm | `search_utils.py:1898-1936` | ✅ |
-| 3 | node_distance: direct neighbor check (depth=1) | `search_utils.py:1795-1854` | ✅ |
-| 3 | episode_mentions: count (Episodic)-[:MENTIONS]->(Entity) | `search_utils.py:1857-1895` | ✅ |
-
 ### Important Notes
 
 1. **Episode search has NO cosine similarity** - only BM25 full-text search is available
@@ -336,7 +295,7 @@ sequenceDiagram
 
 ---
 
-## 3. build_communities(group_ids) - Community Creation Flow (Optional)
+## 3. Optional: build_communities(group_ids) - Static Community Creation Flow
 
 ### Input
 - `G : list[str] | null` - Group IDs to process (null = all groups)
@@ -426,21 +385,9 @@ sequenceDiagram
     Py-->>Py: return (communities, edges)
 ```
 
-### Query Verification
-
-| Phase | Query | Source Code Reference | Verified |
-|-------|-------|----------------------|----------|
-| 1 | `MATCH (c:Community) DETACH DELETE c` | `community_operations.py:remove_communities()` | ✅ |
-| 2 | `π_{DISTINCT group_id} (Entity)` | `community_operations.py:42-52` | ✅ |
-| 3 | `(n)-[e:RELATES_TO]-(m)` with count | `community_operations.py:58-79` | ✅ |
-| 4 | Label Propagation (in-memory) | `community_operations.py:94-139` | ✅ |
-| 5 | Pairwise summary merging | `community_operations.py:175-198` | ✅ |
-| 5 | `summary_description()` for name | `community_operations.py:159-172` | ✅ |
-
-
 ---
 
-## Symbol Reference
+## Symbol Reference (AI-Generated)
 
 ### Relational Algebra Operators
 
