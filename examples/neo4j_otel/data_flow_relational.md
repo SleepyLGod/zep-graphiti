@@ -132,6 +132,145 @@ sequenceDiagram
     Py-->>Py: return AddEpisodeResults(episode=e, nodes=N, edges=F∪F_inv, communities=...)
 ```
 
+High Level queries:
+```sql
+-- context retrieval
+-- related zep steps: phase 1
+(select * from Episodes order by created_at desc limit 20) 
+union current_message
+as RecentEpisodes;
+
+-- entity resolution & state update
+-- related zep steps: phases 2, 3, 6, part of 7
+upsert into HistoryEntities (uuid, name, summary, time) -- in high level: id can be ignored
+select
+    -- if join matches, use existing uuid, else use extracted uuid
+    coalesce(HistoryEntities.uuid, generate_uuid()) as uuid,
+    RecentEntities.name,
+    -- if join matches, use aggregated summary, else use extracted summary
+    -- not sem_agg, cuz this is column-wise operation
+    sem_map(HistoryEntities.summary, RecentEntities.summary, RecentEpisodes, "Update summary with new info") as summary,
+    RecentEpisodes.created_at as time -- actually currentmsg.created_at
+from
+    -- left table: extracted entities
+    sem_map(RecentEpisodes, "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE") as RecentEntities
+    -- or sem_extract(...), cuz LOTUS's sem_map is explicitly one-to-one
+    -- right table: existing entities
+    left sem_join HistoryEntities -- resolution join
+    on (RecentEntities.name, HistoryEntities.name, RecentEpisodes, 
+        "Do ENTITY and DATABASE ENTITY refer to the same real-world object?");
+    -- i.e., on (RecentEntities.name = HistoryEntities.name)
+as ResolvedRecentEntities;
+
+-- fact delta management
+-- related zep steps: phases 4, 5, part of 7
+with RecentFacts as (
+    sem_map(
+        RecentEpisodes, ResolvedRecentEntities, 
+        "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE"
+    )
+    -- data schema: {uuid, src_uuid, tgt_uuid, fact, valid_at}
+),
+-- dup and contradictory detection: cannot be merged;
+--    Finding dup and contradictions are 2 independent mapping networks:
+--    A new fact can either be not inserted (duplicates Fact A) or trigger an operation that invalidates Fact B.
+--    Also, one "LEFT JOIN + CASE" can cause fanout: one RecentFact can match multiple HistoryFacts.
+-- Duplicate Detection (Strict Topology: same src AND tgt)
+--    Question: do we really need that strict topology constraint? 
+--    I think zep use this just for saving costs
+DuplicateFactsMatched as (
+    select
+        RecentFacts.uuid,
+        HistoryFacts.uuid as dup_history_fact_uuid
+    from
+        RecentFacts
+    inner sem_join HistoryFacts
+    on (RecentFacts.src_uuid = HistoryFacts.src_uuid AND RecentFacts.tgt_uuid = HistoryFacts.tgt_uuid)
+    and "Does NEW FACT represent identical factual information as EXISTING FACT?"
+),
+-- Contradictory Detection (Loose Topology: same src OR tgt)
+-- e.g. (Alice) -[LIVES_IN]-> (LA) vs (Alice) -[RESIDES_IN]-> (NY)
+ContradictionFactsMatched as (
+    select
+        RecentFacts.uuid,
+        HistoryFacts.uuid as contradiction_history_fact_uuid
+    from
+        RecentFacts
+    inner sem_join HistoryFacts
+    on HistoryFacts.invalid_at is null
+    and "Does NEW FACT contradict EXISTING FACT?"
+)
+
+-- not good to be upsert: update and insert different rows
+insert into HistoryFacts (uuid, src_uuid, tgt_uuid, fact, time) -- in high level: id can be ignored
+select
+    -- if join matches, use existing uuid, else use extracted uuid
+    generate_uuid() as uuid, RecentFacts.src_uuid, RecentFacts.tgt_uuid, RecentFacts.fact, RecentEpisodes.created_at
+from RecentFacts
+where uuid not in (select uuid from DuplicateFactsMatched);
+-- also, zep updates EXISTING facts that were DUPLICATED
+
+update HistoryFacts
+set invalid_at = RecentEpisodes.created_at
+where uuid in (select contradiction_history_fact_uuid from ContradictionFactsMatched);
+
+-- community update
+-- related zep steps: part of 7
+-- schema: HistoryCommunities (uuid, name, summary, time), HistoryCommunityMembership (community_uuid, entity_uuid, time)
+with RecentCommunitiesFromEntities as (
+    select
+        ResolvedRecentEntities.uuid as entity_uuid,
+        ResolvedRecentEntities.summary as entity_summary,
+        -- logic: if there's a community, use it; otherwise, look for neighbors' communities
+        coalesce(
+            HistoryCommunityMembers.community_uuid,
+            infer_dominant_community_from_entity_neighbors(ResolvedRecentEntities.uuid)
+        ) as recent_community_uuid
+    from ResolvedRecentEntities
+    left join HistoryCommunityMembership -- standard relational join, no semantic outer join
+    on ResolvedRecentEntities.uuid = HistoryCommunityMembers.entity_uuid
+),
+-- ⚠️ Zep's Flaw: Per-Entity Iteration (No GROUP BY)
+-- This mimics the "par ∀ n ∈ N" loop in the Zep workflow. 
+-- If N entities map to the same community, this produces N distinct fusion rows.
+LatestRecentCommunitiesFromEntities as (
+    select
+        RecentCommunitiesFromEntities.recent_community_uuid,
+        RecentCommunitiesFromEntities.entity_uuid,
+        sem_map(
+            HistoryCommunities.summary, RecentCommunitiesFromEntities.entity_summary, 
+            "Synthesize information from two summaries into a single succinct summary"
+        ) as latest_community_summary
+    from RecentCommunitiesFromEntities
+    left join HistoryCommunities
+    on RecentCommunitiesFromEntities.recent_community_uuid = HistoryCommunities.uuid
+    where RecentCommunitiesFromEntities.recent_community_uuid is not null
+)
+
+-- ⚠️ Zep's Race Condition: N-to-1 Update without aggregation
+-- updating one target row from multiple source rows results in undefined behavior (Last-Write-Wins). 
+update HistoryCommunities
+set
+    name = sem_map(HistoryCommunities.name, LatestRecentCommunitiesFromEntities.latest_community_summary, 
+    "Create short one-sentence description explaining what kind of information is summarized"),
+    summary = LatestRecentCommunitiesFromEntities.latest_community_summary,
+    time = RecentEpisodes.created_at
+from LatestRecentCommunitiesFromEntities
+where HistoryCommunities.uuid = LatestRecentCommunitiesFromEntities.recent_community_uuid;
+
+insert into HistoryCommunityMembership (community_uuid, entity_uuid, time)
+select
+    RecentCommunitiesFromEntities.recent_community_uuid,
+    RecentCommunitiesFromEntities.entity_uuid,
+    RecentEpisodes.created_at
+from RecentCommunitiesFromEntities
+where RecentCommunitiesFromEntities.recent_community_uuid is not null;
+
+-- draft solution: 
+-- 1. Explicit Array Collection + Scalar Semantic Map: apply a GROUP BY clause on the target community_uuid and use the relational collect() function to gather all newly assigned entity summaries into a single array. Subsequently, we utilize a scalar sem_map operator to fuse the existing community summary with this array of new summaries in a single LLM invocation
+-- 2. Pure Semantic Aggregation: directly apply a GROUP BY community_uuid and utilize sem_agg to perform a cross-row semantic reduction
+```
+
 ---
 
 ## 2. search(q, G, cfg) - Search Flow
