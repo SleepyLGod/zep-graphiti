@@ -136,9 +136,12 @@ High Level queries:
 ```sql
 -- context retrieval
 -- related zep steps: phase 1
-(select * from Episodes order by created_at desc limit 20) 
-union current_message
-as RecentEpisodes;
+select 
+    string_agg(content, '\n') as content, max(created_at) as created_at
+from (
+    (select * from Episodes order by created_at desc limit L) -- L=20
+    union current_message
+) as RecentEpisodes; -- better use 'create temp table'
 
 -- entity resolution & state update
 -- related zep steps: phases 2, 3, 6, part of 7
@@ -149,35 +152,41 @@ select
     RecentEntities.name,
     -- if join matches, use aggregated summary, else use extracted summary
     -- not sem_agg, cuz this is column-wise operation
-    sem_map(HistoryEntities.summary, RecentEntities.summary, RecentEpisodes, "Update summary with new info") as summary,
+    sem_map(HistoryEntities.summary, RecentEntities.summary, RecentEpisodes.content, "Update summary with new info") as summary, -- sem_map/extract: 
     RecentEpisodes.created_at as time -- actually currentmsg.created_at
 from
     -- left table: extracted entities
-    sem_map(RecentEpisodes, "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE") as RecentEntities
-    -- or sem_extract(...), cuz LOTUS's sem_map is explicitly one-to-one
+    sem_map(
+        RecentEpisodes.content,
+        "Extract entity nodes mentioned explicitly or implicitly in CURRENT MESSAGE"
+    ) as RecentEntities(name, summary) -- or sem_extract(...)as RecentEntities(name, summary) in LOTUS
+    cross join RecentEpisodes -- one row
     -- right table: existing entities
     left sem_join HistoryEntities -- resolution join
-    on (RecentEntities.name, HistoryEntities.name, RecentEpisodes, 
+    on (RecentEntities.name, HistoryEntities.name, RecentEpisodes.content, 
         "Do ENTITY and DATABASE ENTITY refer to the same real-world object?");
     -- i.e., on (RecentEntities.name = HistoryEntities.name)
-as ResolvedRecentEntities;
+as ResolvedRecentEntities; -- better use 'create temp table'
 
 -- fact delta management
 -- related zep steps: phases 4, 5, part of 7
 with RecentFacts as (
-    sem_map(
-        RecentEpisodes, ResolvedRecentEntities, 
-        "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE"
+    select * from (
+        sem_map(
+            (select content from RecentEpisodes), (select array_agg(name) from ResolvedRecentEntities), 
+            "Extract all factual relationships between ENTITIES based on CURRENT MESSAGE"
+        ) -- can be sem_extract in LOTUS
+        -- data schema: {uuid, src_uuid, tgt_uuid, fact, valid_at}
     )
-    -- data schema: {uuid, src_uuid, tgt_uuid, fact, valid_at}
 ),
--- dup and contradictory detection: cannot be merged;
+-- dup and contradictory detection: cannot be merged?
 --    Finding dup and contradictions are 2 independent mapping networks:
 --    A new fact can either be not inserted (duplicates Fact A) or trigger an operation that invalidates Fact B.
 --    Also, one "LEFT JOIN + CASE" can cause fanout: one RecentFact can match multiple HistoryFacts.
 -- Duplicate Detection (Strict Topology: same src AND tgt)
 --    Question: do we really need that strict topology constraint? 
 --    I think zep use this just for saving costs
+--    THEN: if they have the same topology constraint, we can use window fuction/groupby to merge the queries
 DuplicateFactsMatched as (
     select
         RecentFacts.uuid,
@@ -185,7 +194,7 @@ DuplicateFactsMatched as (
     from
         RecentFacts
     inner sem_join HistoryFacts
-    on (RecentFacts.src_uuid = HistoryFacts.src_uuid AND RecentFacts.tgt_uuid = HistoryFacts.tgt_uuid)
+    on (RecentFacts.src_uuid = HistoryFacts.src_uuid and RecentFacts.tgt_uuid = HistoryFacts.tgt_uuid)
     and "Does NEW FACT represent identical factual information as EXISTING FACT?"
 ),
 -- Contradictory Detection (Loose Topology: same src OR tgt)
@@ -207,11 +216,12 @@ select
     -- if join matches, use existing uuid, else use extracted uuid
     generate_uuid() as uuid, RecentFacts.src_uuid, RecentFacts.tgt_uuid, RecentFacts.fact, RecentEpisodes.created_at
 from RecentFacts
+cross join RecentEpisodes -- one row
 where uuid not in (select uuid from DuplicateFactsMatched);
 -- also, zep updates EXISTING facts that were DUPLICATED
 
 update HistoryFacts
-set invalid_at = RecentEpisodes.created_at
+set invalid_at = (select created_at from RecentEpisodes)
 where uuid in (select contradiction_history_fact_uuid from ContradictionFactsMatched);
 
 -- community update
@@ -223,12 +233,12 @@ with RecentCommunitiesFromEntities as (
         ResolvedRecentEntities.summary as entity_summary,
         -- logic: if there's a community, use it; otherwise, look for neighbors' communities
         coalesce(
-            HistoryCommunityMembers.community_uuid,
+            HistoryCommunityMembership.community_uuid,
             infer_dominant_community_from_entity_neighbors(ResolvedRecentEntities.uuid)
         ) as recent_community_uuid
     from ResolvedRecentEntities
     left join HistoryCommunityMembership -- standard relational join, no semantic outer join
-    on ResolvedRecentEntities.uuid = HistoryCommunityMembers.entity_uuid
+    on ResolvedRecentEntities.uuid = HistoryCommunityMembership.entity_uuid
 ),
 -- ⚠️ Zep's Flaw: Per-Entity Iteration (No GROUP BY)
 -- This mimics the "par ∀ n ∈ N" loop in the Zep workflow. 
@@ -251,11 +261,12 @@ LatestRecentCommunitiesFromEntities as (
 -- updating one target row from multiple source rows results in undefined behavior (Last-Write-Wins). 
 update HistoryCommunities
 set
-    name = sem_map(HistoryCommunities.name, LatestRecentCommunitiesFromEntities.latest_community_summary, 
+    name = sem_map(LatestRecentCommunitiesFromEntities.latest_community_summary, 
     "Create short one-sentence description explaining what kind of information is summarized"),
     summary = LatestRecentCommunitiesFromEntities.latest_community_summary,
     time = RecentEpisodes.created_at
 from LatestRecentCommunitiesFromEntities
+cross join RecentEpisodes -- one row
 where HistoryCommunities.uuid = LatestRecentCommunitiesFromEntities.recent_community_uuid;
 
 insert into HistoryCommunityMembership (community_uuid, entity_uuid, time)
@@ -264,11 +275,49 @@ select
     RecentCommunitiesFromEntities.entity_uuid,
     RecentEpisodes.created_at
 from RecentCommunitiesFromEntities
+cross join RecentEpisodes -- one row
 where RecentCommunitiesFromEntities.recent_community_uuid is not null;
 
 -- draft solution: 
 -- 1. Explicit Array Collection + Scalar Semantic Map: apply a GROUP BY clause on the target community_uuid and use the relational collect() function to gather all newly assigned entity summaries into a single array. Subsequently, we utilize a scalar sem_map operator to fuse the existing community summary with this array of new summaries in a single LLM invocation
 -- 2. Pure Semantic Aggregation: directly apply a GROUP BY community_uuid and utilize sem_agg to perform a cross-row semantic reduction
+
+
+-----------------------------------------------------------------------------------------------
+-- P.S.: queries of facts if topology constraints of dup and contradict is the same:
+-- -- 1. Single Join produces fanout and determines all states at the same time
+-- with FactFanOutState as (
+--     select 
+--         RecentFacts.uuid,
+--         RecentFacts.src_uuid, RecentFacts.tgt_uuid, RecentFacts.fact,
+--         HistoryFacts.uuid as history_uuid,
+--         sem_filter(..., "Is Duplicate?") as is_dup,
+--         sem_filter(..., "Is Contradictory?") as is_contra
+--     from RecentFacts
+--     left sem_join HistoryFacts 
+--     on RecentFacts.src_uuid = HistoryFacts.src_uuid
+-- ),
+-- -- 2. use window function (OVER PARTITION) to solve the "multiple identity" aggregation problem
+-- FactDecisions as (
+--     select 
+--         *,
+--         -- core logic: if there's any duplicate in the fanout, then it's a duplicate
+--         MAX(CAST(is_dup as INT)) over (partition by fact_id) as has_any_duplicate
+--     from FactFanOutState
+-- )
+
+-- -- 3. Side Effect 1: Insert
+-- -- only insert if it's not a duplicate
+-- insert into HistoryFacts (uuid, src_uuid, tgt_uuid, fact)
+-- select generate_uuid(), src_uuid, tgt_uuid, fact
+-- from FactDecisions
+-- where has_any_duplicate = 0
+-- group by fact_id, src_uuid, tgt_uuid, fact; -- deduplication
+
+-- -- 4. Side Effect 2: Update Invalidate
+-- update HistoryFacts
+-- set invalid_at = NOW()
+-- where uuid in (select history_uuid from FactDecisions where is_contra = true);
 ```
 
 ---
