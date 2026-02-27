@@ -248,156 +248,114 @@ Each trait entry follows the pattern: `{"value": "...", "evidences": ["date|conv
 -- EverMemOS Insertion Workflow as Semantic Queries
 -- =====================================================
 -- Naming conventions:
---   Recent*   = just produced from current message segment (temp tables)
+--   Recent*   = just produced from current memorize() call (temp / in-flight)
 --   History*  = persisted in DB from previous interactions
---   *SlidingWindow = accumulated message buffer between boundaries
-
+-- Note: actual implementation partitions by group_id;
+--   omitted here for clarity — each user stream runs this flow independently.
 
 -- =============================================================
 -- Phase 0: Temporal Segmentation
--- Goal: segment the continuous message stream at semantic
---        boundaries into coherent conversational segments
+-- Goal: accumulate messages into a sliding window buffer,
+--        and seal it when a semantic boundary is detected
 -- =============================================================
 
--- step 0.1: retrieve accumulated messages since last segmentation
-create temp table MessageSlidingWindow as
-select *
-from HistoryMessages                -- DB: conversation_data
-where group_id = :group_id
-  and created_at > (select last_segmentation_time
-                    from SegmentationState   -- DB: conversation_status
-                    where group_id = :group_id);
-
--- step 0.2: detect semantic boundary
--- asks: "has the conversation reached a natural break point?"
-create temp table BoundaryDecision as
-select
-    sem_filter(
-        MessageSlidingWindow.content, :new_message,
-        "Has the current conversational episode reached a natural boundary "
-        "(topic shift, long time gap, or logical conclusion)?"
-    ) as is_boundary;
--- deterministic guard (bypass LLM):
---   is_boundary := true if tokens >= 8192 or messages >= 50
-
--- if NOT is_boundary → append new message to HistoryMessages, return 0
--- if is_boundary → proceed: the sliding window forms one segment
-
+-- step 0.1: append incoming message to the sliding window buffer
+insert into RecentMessageSlidingWindow values (:new_message);
+-- RecentMessageSlidingWindow: live buffer of all messages since last boundary
+-- (maps to ConversationData in implementation)
 
 -- =============================================================
--- Phase 1: Multi-Perspective Semantic Decomposition
--- Goal: decompose the segment into structured memories
---        from multiple cognitive perspectives
+-- Phase 1: Seal, Decompose & Persist
+-- Goal: when a semantic boundary is detected, seal the buffer
+--        into a segment, decompose into structured memories,
+--        and persist for retrieval
+-- (steps below only execute when boundary is detected;
+--  boundary = token_count >= 8192 or message_count >= 50
+--  or sem_filter("Has the conversation reached a natural boundary
+--  (topic shift, long time gap, or logical conclusion)?"))
 -- =============================================================
 
--- step 1.0: seal the sliding window into a persistent segment
-insert into HistorySegments              -- DB: memcells
-select * from MessageSlidingWindow;
+-- step 1.1: seal buffer → persistent segment (boundary as gate condition)
+insert into HistorySegments
+select * from RecentMessageSlidingWindow
+where sem_filter(
+    content, "Has the conversation reached a natural boundary (topic shift, long time gap, or logical conclusion)?"
+) = true
+or token_count(content) >= :token_threshold
+or message_count(content) >= :message_threshold
+as ReadyRecentMessageSegment;
+-- if no boundary: this insert is empty, pipeline stops here
 
--- step 1.1: narrative synthesis
--- asks: "synthesize this conversation into a third-person narrative"
-create temp table RecentEpisode as
+-- step 1.2: decompose the segment & persist as memories
+-- (HistoryMemories abstracts three tables: HistoryEpisodes, HistoryForesights,
+--  HistoryFacts; each triple-writes: MongoDB → Elasticsearch → Milvus)
+insert into HistoryMemories (episode, subject, foresights, facts)
 select
     sem_map(
-        RecentMessageSegment.content,
+        content,
         "Synthesize this conversation into a concise third-person "
         "episodic narrative capturing the key events and context"
     ) as episode,
     sem_map(
-        RecentMessageSegment.content,
+        content,
         "What is the central subject of this conversation?"
-    ) as subject
-from RecentMessageSegment;              -- i.e., the just-sealed segment
-
--- step 1.2: time-bounded prospection (assistant scene only)
--- asks: "what future actions or predictions are implied?"
-create temp table RecentForesights as
-select
+    ) as subject,
     sem_extract(
-        RecentMessageSegment.content,
-        "Extract time-bounded future predictions, planned actions, "
-        "or upcoming events mentioned or implied in this conversation"
-    ) as (foresight, evidence, start_time, end_time);
-
--- step 1.3: atomic fact extraction (assistant scene only)
--- asks: "what discrete factual events occurred?"
-create temp table RecentFacts as
-select
+        content,
+        "Extract time-bounded future predictions or planned actions"
+    ) as foresights,                                         -- assistant scene only
     sem_extract(
-        RecentMessageSegment.content,
+        content,
         "Extract discrete atomic factual events "
         "(who did what, when, with specific details)"
-    ) as (fact, timestamp);
+    ) as facts                                               -- assistant scene only
+from ReadyRecentMessageSegment
+as RecentMemories;
+-- note: in group chat scene, only episode/subject are extracted (no foresights/facts),
+--   and episode extraction runs once per participant as well
 
--- note: in assistant scene, steps 1.1 / 1.2 / 1.3 run in parallel
--- note: in group chat scene, only step 1.1 runs (no foresight/facts),
---        and episode extraction runs for group + each participant
-
+-- clear buffer and advance segmentation epoch
+delete from RecentMessageSlidingWindow
+where exists (select 1 from ReadyRecentMessageSegment);
+update SegmentationState set last_segmentation_time = :now
+where exists (select 1 from ReadyRecentMessageSegment);
 
 -- =============================================================
 -- Phase 2: Semantic Consolidation
--- Goal: assign the segment to a topic cluster, and distill
+-- Goal: assign the segment to a thematic topic, and distill
 --        stable user traits if enough evidence has accumulated
 -- =============================================================
 
--- step 2.1: incremental topic clustering
--- asks: "which existing topic does this episode belong to?"
-create temp table TopicAssignment as
+-- step 2.1: assign segment to existing or new topic
+upsert into TopicState (topic_id, centroid, last_timestamp) -- also increments segment_count
 select
     coalesce(
-        (select topic_id
-         from TopicState                   -- DB: cluster_states
+        (select topic_id from TopicState
          where sem_sim_join(
-             RecentEpisode.episode, TopicState.centroid_embedding,
-             "Does this new episode belong to the same thematic storyline?"
-         ) = true
-         and time_gap(TopicState.last_timestamp, :now) < :max_gap_days
+             RecentMemories.episode, TopicState.centroid,
+             "Does this episode belong to the same thematic storyline?"
+         ) and time_gap(TopicState.last_timestamp, :now) < :max_gap_days
          limit 1),
-        new_topic_id()                     -- no match → create new topic
-    ) as topic_id;
+        new_topic_id()
+    ) as topic_id,
+    RecentMemories.episode,                                  -- for centroid update
+    :now
+from RecentMemories
+as TopicAssignment;
 
--- step 2.2: conditional profile distillation
--- asks: "given all episodes in this topic, what user traits can be distilled?"
--- (only triggered when topic has >= threshold segments)
-create temp table RecentProfiles as
+-- step 2.2: distill user profile (only when topic has enough segments)
+upsert into HistoryProfiles (traits)
 select
     sem_agg(
-        TopicSegments.episode,
+        HistorySegments.episode,
         HistoryProfiles.traits,
         "Given the existing user profile and these conversational episodes, "
-        "distill updated stable user traits: preferences, habits, "
-        "personality characteristics, factual attributes"
-    ) as traits,
-    TopicSegments.user_id
-from
-    HistorySegments as TopicSegments     -- all segments in the matched topic
-    left join HistoryProfiles            -- DB: user_profiles
-        on TopicSegments.user_id = HistoryProfiles.user_id
-where TopicSegments.topic_id = TopicAssignment.topic_id
-  and (select count(*) from HistorySegments
-       where topic_id = TopicAssignment.topic_id)
-      >= :profile_min_segments;
-
-upsert into HistoryProfiles (user_id, traits)
-select user_id, traits from RecentProfiles;
-
-
--- =============================================================
--- Phase 3: Persistence
--- Goal: persist extracted memories to DB
---       (triple-written to MongoDB + Elasticsearch + Milvus)
--- =============================================================
-
-insert into HistoryEpisodes    select * from RecentEpisode;
-insert into HistoryForesights  select * from RecentForesights;   -- assistant only
-insert into HistoryFacts       select * from RecentFacts;        -- assistant only
--- triple-write: each insert writes to MongoDB (source of truth),
---   then syncs to Elasticsearch (BM25 keyword index)
---   and Milvus (vector embedding index)
+        "distill updated stable user traits"
+    )
+from HistorySegments
+    inner join TopicAssignment on HistorySegments.topic_id = TopicAssignment.topic_id
+    left join HistoryProfiles on true
+where (select segment_count from TopicState
+       where topic_id = TopicAssignment.topic_id) >= :min_segments;
 -- profiles are MongoDB-only (no ES/Milvus sync)
-
--- advance segmentation epoch
-update SegmentationState
-set last_segmentation_time = :now
-where group_id = :group_id;
 ```
