@@ -86,11 +86,12 @@ FactResolution as (
             CurrentFacts.fact, SelectedHistoryFacts.fact,
             "If action is UPDATE, merge them into a comprehensive fact. Else return new_content"
         ) as enriched_fact
+        -- in real workflow, fact_mem_action and enriched_fact are computed together in one LLM call
     from CurrentFacts
-    cross join lateral (
+    cross join lateral ( -- or left join in high level
         select * from HistoryFacts where id 
         in sem_topk(CurrentFacts.fact, HistoryFacts.fact, k=5, "find top k similar facts") 
-        -- here they use vector anns search
+        -- here they use vector anns search, i.e. topk
     ) as SelectedHistoryFacts
 )
 
@@ -143,6 +144,10 @@ CurrentEntityAligned as (
         ['SAME', 'DIFFERENT'], "Are these the exact same entity?"
     ) = 'SAME'
 ),
+-- i.e. vector search + llm filter = 
+-- left sem_join HistoryEntities
+-- on "Do ENTITY and DATABASE ENTITY refer to the same real-world object?"
+
 -- current relation/fact resolution
 FactResolution as (
     select
@@ -160,7 +165,8 @@ FactResolution as (
     join CurrentEntityAligned as SrcCurrenEntityAligned on CurrentRelations.src_entity_name = SrcCurrenEntityAligned.entity_name
     join CurrentEntityAligned as DestCurrenEntityAligned on CurrentRelations.dest_entity_name = DestCurrenEntityAligned.entity_name
     left join HistoryRelations
-    on SrcCurrenEntityAligned.id = HistoryRelations.src_id -- 1-hop traversal
+    on SrcCurrenEntityAligned.id = HistoryRelations.src_id 
+    or DestCurrenEntityAligned.id = HistoryRelations.dest_id -- 1-hop traversal
 )
 
 upsert into HistoryEntities (id, entity_name, entity_type)
