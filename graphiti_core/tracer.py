@@ -147,13 +147,15 @@ class OpenTelemetryTracer(Tracer):
     @contextmanager
     def start_span(self, name: str) -> Generator[OpenTelemetrySpan | NoOpSpan, None, None]:
         """Start a new OpenTelemetry span with the configured prefix."""
+        full_name = f'{self._span_prefix}.{name}'
         try:
-            full_name = f'{self._span_prefix}.{name}'
             with self._tracer.start_as_current_span(full_name) as span:
                 yield OpenTelemetrySpan(span)
-        except Exception:
-            # If tracing fails, yield a no-op span to prevent breaking the operation
-            yield NoOpSpan()
+        except Exception as e:
+            # Re-raise the exception - don't swallow it!
+            # The original code had a bug: it tried to yield again after an exception,
+            # which causes "generator didn't stop after throw()" error.
+            raise
 
 
 def create_tracer(otel_tracer: Any | None = None, span_prefix: str = 'graphiti') -> Tracer:
