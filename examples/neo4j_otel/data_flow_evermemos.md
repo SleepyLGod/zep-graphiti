@@ -102,7 +102,7 @@ All data lives in MongoDB. Elasticsearch and Milvus are **secondary indexes** �
 | new_msg_start_time | datetime | Accumulated new conversation read start time |
 
 ### ConversationData
-**Collection**: `conversation_data` · **Purpose**: Temporary buffer for accumulated messages between two segmentation boundaries (the "sliding window" content).
+**Collection**: `conversation_data` · **Purpose**: Temporary buffer for accumulated messages between two segmentation boundaries (the "Tumbling window" content).
 
 Each record is a single message, stored as a raw dict with fields like `content`, `speaker_id`, `speaker_name`, `timestamp`, `msgType`, etc.
 
@@ -255,13 +255,13 @@ Each trait entry follows the pattern: `{"value": "...", "evidences": ["date|conv
 
 -- =============================================================
 -- Phase 0: Temporal Segmentation
--- Goal: accumulate messages into a sliding window buffer,
+-- Goal: accumulate messages into a Tumbling window buffer,
 --        and seal it when a semantic boundary is detected
 -- =============================================================
 
--- step 0.1: append incoming message to the sliding window buffer
-insert into RecentMessageSlidingWindow values (:new_message);
--- RecentMessageSlidingWindow: live buffer of all messages since last boundary
+-- step 0.1: append incoming message to the Tumbling window buffer
+insert into RecentMessageTumblingWindow values (:new_message);
+-- RecentMessageTumblingWindow: live buffer of all messages since last boundary
 -- (maps to ConversationData in implementation)
 
 -- =============================================================
@@ -277,7 +277,7 @@ insert into RecentMessageSlidingWindow values (:new_message);
 
 -- step 1.1: seal buffer → persistent segment (boundary as gate condition)
 insert into HistorySegments
-select * from RecentMessageSlidingWindow
+select * from RecentMessageTumblingWindow
 where sem_filter(
     content, "Has the conversation reached a natural boundary (topic shift, long time gap, or logical conclusion)?"
 ) = true
@@ -315,7 +315,7 @@ as RecentMemories;
 --   and episode extraction runs once per participant as well
 
 -- clear buffer and advance segmentation epoch
-delete from RecentMessageSlidingWindow
+delete from RecentMessageTumblingWindow
 where exists (select 1 from ReadyRecentMessageSegment);
 update SegmentationState set last_segmentation_time = :now
 where exists (select 1 from ReadyRecentMessageSegment);
