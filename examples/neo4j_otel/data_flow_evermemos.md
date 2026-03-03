@@ -327,21 +327,21 @@ where exists (select 1 from ReadyRecentMessageSegment);
 -- =============================================================
 
 -- step 2.1: assign segment to existing or new topic
-upsert into TopicState (topic_id, centroid, last_timestamp) -- also increments segment_count
+upsert into Topic (topic_id, centroid, last_timestamp) -- also increments segment_count
 select
     coalesce(
-        (select topic_id from TopicState
+        (select topic_id from Topic
          where sem_sim_join(
-             RecentMemories.episode, TopicState.centroid,
+             RecentMemories.episode, Topic.centroid,
              "Does this episode belong to the same thematic storyline?"
-         ) and time_gap(TopicState.last_timestamp, :now) < :max_gap_days
+         ) and time_gap(Topic.last_timestamp, :now) < :max_gap_days
          limit 1),
         new_topic_id()
     ) as topic_id,
     RecentMemories.episode,                                  -- for centroid update
     :now
 from RecentMemories
-as TopicAssignment;
+as RecentMemoryTopicAssignment;
 
 -- step 2.2: distill user profile (only when topic has enough segments)
 upsert into HistoryProfiles (traits)
@@ -353,9 +353,9 @@ select
         "distill updated stable user traits"
     )
 from HistorySegments
-    inner join TopicAssignment on HistorySegments.topic_id = TopicAssignment.topic_id
+    inner join RecentMemoryTopicAssignment on HistorySegments.topic_id = RecentMemoryTopicAssignment.topic_id
     left join HistoryProfiles on true
-where (select segment_count from TopicState
-       where topic_id = TopicAssignment.topic_id) >= :min_segments;
+where (select segment_count from Topic
+       where topic_id = RecentMemoryTopicAssignment.topic_id) >= :min_segments;
 -- profiles are MongoDB-only (no ES/Milvus sync)
 ```
