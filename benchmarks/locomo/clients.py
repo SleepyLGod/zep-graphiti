@@ -35,10 +35,18 @@ class BgeM3Embedder(EmbedderClient):
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
-        """Embed one string using the Graphiti embedder contract."""
-        if not isinstance(input_data, str):
-            raise TypeError('BgeM3Embedder.create expects one string')
-        vectors = await self._encode([input_data])
+        """Return the first embedding, matching Graphiti's existing embedder contract."""
+        if isinstance(input_data, str):
+            inputs = [input_data]
+        elif isinstance(input_data, list) and input_data:
+            inputs = [item for item in input_data if isinstance(item, str)]
+            if len(inputs) != len(input_data):
+                raise TypeError(
+                    'BgeM3Embedder.create expects a string or non-empty list of strings'
+                )
+        else:
+            raise TypeError('BgeM3Embedder.create expects a string or non-empty list of strings')
+        vectors = await self._encode(inputs)
         return vectors[0]
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:

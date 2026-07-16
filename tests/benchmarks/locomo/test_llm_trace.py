@@ -135,3 +135,28 @@ async def test_thinking_is_enabled_without_recording_secrets(tmp_path: Path) -> 
     request_text = (tmp_path / event['request_artifact']).read_text()
     assert 'secret' not in request_text
     assert 'Authorization' not in request_text
+
+
+@pytest.mark.asyncio
+async def test_existing_trace_is_appended_without_overwriting_artifacts(tmp_path: Path) -> None:
+    pricing = PricingSnapshot.deepseek_2026_07_17()
+    first_writer = LLMTraceWriter(tmp_path, pricing=pricing)
+    first = TracedChatCompletions(_FakeCompletions([_response()]), first_writer)
+    with provider_call('extract_nodes.extract_message', None):
+        await first.create(model='deepseek-v4-flash', messages=[])
+
+    first_event = json.loads((tmp_path / 'trace/events.jsonl').read_text().splitlines()[0])
+    first_request = tmp_path / first_event['request_artifact']
+    first_request_text = first_request.read_text()
+
+    second_writer = LLMTraceWriter(tmp_path, pricing=pricing)
+    second = TracedChatCompletions(_FakeCompletions([_response()]), second_writer)
+    with provider_call('extract_edges.edge', None):
+        await second.create(model='deepseek-v4-flash', messages=[])
+
+    events = [
+        json.loads(line) for line in (tmp_path / 'trace/events.jsonl').read_text().splitlines()
+    ]
+    assert len(events) == 2
+    assert events[1]['request_artifact'].startswith('trace/prompts/000002-')
+    assert first_request.read_text() == first_request_text

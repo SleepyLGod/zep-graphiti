@@ -26,6 +26,7 @@ async def test_bge_embedder_normalizes_single_and_batch_embeddings() -> None:
     embedder = BgeM3Embedder(model=model, embedding_dim=3)
 
     assert await embedder.create('hello') == [1.0, 1.0, 1.0]
+    assert await embedder.create(['hello']) == [1.0, 1.0, 1.0]
     assert await embedder.create_batch(['a', 'b']) == [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
     assert all(call[1]['normalize_embeddings'] is True for call in model.calls)
 

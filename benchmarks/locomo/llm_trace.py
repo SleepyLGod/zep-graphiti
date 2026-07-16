@@ -59,9 +59,13 @@ class LLMTraceWriter:
         self.events_path = self.trace_dir / 'events.jsonl'
         self.pricing = pricing
         self._lock = threading.Lock()
-        self._sequence = 0
         self.prompts_dir.mkdir(parents=True, exist_ok=True)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
+        self._sequence = (
+            sum(1 for line in self.events_path.read_text(encoding='utf-8').splitlines() if line)
+            if self.events_path.exists()
+            else 0
+        )
 
     @property
     def event_count(self) -> int:
